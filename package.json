@@ -10,12 +10,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@convex-dev/better-auth": "^0.10.10",
+    "@react-email/components": "^1.0.6",
+    "@react-email/render": "^2.0.4",
     "@tailwindcss/vite": "^4.1.18",
+    "better-auth": "^1.4.9",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "convex": "^1.31.6",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "resend": "^6.8.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4.1.18"
   },

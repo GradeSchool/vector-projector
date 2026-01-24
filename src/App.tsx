@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useConvexAuth } from 'convex/react'
 import { UserPage } from './components/UserPage'
 import { TestModal } from './components/modals/TestModal'
+import { AuthModal } from './components/modals/AuthModal'
 
 const MIN_WIDTH = 1024
 const MIN_HEIGHT = 768
@@ -8,10 +10,12 @@ const MIN_HEIGHT = 768
 type Page = 'main' | 'user'
 
 function App() {
+  const { isLoading, isAuthenticated } = useConvexAuth()
   const [tooSmall, setTooSmall] = useState(false)
   const [activeStep, setActiveStep] = useState(1)
   const [currentPage, setCurrentPage] = useState<Page>('main')
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false)
+  const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | null>(null)
 
   useEffect(() => {
     const check = () => setTooSmall(
@@ -21,6 +25,7 @@ function App() {
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
 
   if (tooSmall) {
     return (
@@ -56,18 +61,42 @@ function App() {
           <button className="hover:underline">Save</button>
         </div>
 
-        {/* User - navigates to user page */}
-        <button
-          onClick={() => setCurrentPage('user')}
-          className="w-20 h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
-        >
-          User
-        </button>
+        {/* Auth buttons */}
+        {isLoading ? (
+          <div className="w-32 h-full flex items-center justify-center bg-orange-400 text-white font-medium">
+            ...
+          </div>
+        ) : isAuthenticated ? (
+          <button
+            onClick={() => setCurrentPage('user')}
+            className="w-20 h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
+          >
+            User
+          </button>
+        ) : (
+          <div className="flex h-full">
+            <button
+              onClick={() => setAuthModalMode('signup')}
+              className="px-4 h-full flex items-center justify-center bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors text-sm"
+            >
+              Sign Up
+            </button>
+            <button
+              onClick={() => setAuthModalMode('signin')}
+              className="px-4 h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors text-sm"
+            >
+              Sign In
+            </button>
+          </div>
+        )}
       </header>
 
       {/* Page content */}
       {currentPage === 'user' ? (
-        <UserPage onBack={() => setCurrentPage('main')} />
+        <UserPage
+          onBack={() => setCurrentPage('main')}
+          onSignOut={() => setCurrentPage('main')}
+        />
       ) : (
         /* Main content area */
         <div className="flex flex-1 overflow-hidden">
@@ -103,7 +132,7 @@ function App() {
                     Panel content for step 1
                   </p>
                   <button
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={() => setIsTestModalOpen(true)}
                     className="px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600 transition-colors text-sm"
                   >
                     Open Test Modal
@@ -127,7 +156,12 @@ function App() {
       )}
 
       {/* Modals */}
-      <TestModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <TestModal isOpen={isTestModalOpen} onClose={() => setIsTestModalOpen(false)} />
+      <AuthModal
+        isOpen={authModalMode !== null}
+        onClose={() => setAuthModalMode(null)}
+        mode={authModalMode ?? 'signin'}
+      />
     </div>
   )
 }

@@ -1,0 +1,16 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  // App-specific user data (extends Better Auth user)
+  // Better Auth manages its own tables (betterAuth:user, betterAuth:session, etc.)
+  // This table links to Better Auth via authUserId
+  users: defineTable({
+    authUserId: v.string(), // Better Auth user ID
+    email: v.string(),
+    name: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_authUserId", ["authUserId"])
+    .index("by_email", ["email"]),
+});

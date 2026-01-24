@@ -43,6 +43,8 @@ Body: { "content": "...", "source": "vector-projector" }
 POST /api/apps/{name}/checked     Mark app as synced
 ```
 
+**Note:** The blueprint server must be restarted by the user after creating NEW entries. Updates to existing files do not require a restart.
+
 ### Frontmatter (required on all markdown files)
 
 ```yaml
@@ -98,3 +100,15 @@ HeroForge-style SPA. All primary interaction on one page.
 ### Viewport Gate
 
 Desktop-only. Minimum 1024x768. No mobile support.
+
+## Critical Notes (Pre-Production)
+
+**See blueprint: `core/00-overview/critical-notes.md`**
+
+Before production launch, must investigate and implement:
+
+1. **Bot Protection** - Vercel bot detection, CAPTCHA for signup
+2. **Rate Limiting** - Convex rate limiting for all public endpoints
+3. **Resend Domain** - Verify domain, update FROM_EMAIL in `convex/emails.ts`
+
+These are HIGH PRIORITY - without them, bots can spam signups and trigger email costs.

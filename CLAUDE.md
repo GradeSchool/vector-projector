@@ -6,7 +6,9 @@ A SaaS app for 3D printing tools. **First app** in a series built using the SaaS
 
 **CRITICAL - Follow these rules strictly:**
 
-1. **NEVER run the dev server.** User handles `npm run dev`. The dev server port is unpredictable and other services may be running. Starting/stopping dev servers can interfere with the user's environment.
+1. **NEVER run the dev server.** User handles `npm run dev`. Starting/stopping dev servers can interfere with the user's environment.
+
+> **Port 5173 Rule:** This app must run on port 5173 for Google OAuth to work. Before starting dev, ensure no other Vite apps are running. The blueprint frontend runs on 4001, so it won't conflict. If another SaaS app is running, stop it first.
 
 2. **After code changes, run build/lint.** Always run `npm run build` and `npm run lint` to verify changes compile and pass linting.
 
@@ -44,6 +46,20 @@ POST /api/apps/{name}/checked     Mark app as synced
 ```
 
 **Note:** The blueprint server must be restarted by the user after creating NEW entries. Updates to existing files do not require a restart.
+
+### Temp File Pattern for API Posts
+
+Inline JSON in curl commands requires painful escaping. Use the temp file trick:
+
+```bash
+# 1. Write JSON to temp-update.json (use Write tool)
+# 2. POST using the file
+curl -X POST http://localhost:3001/api/files/path/to/doc.md \
+  -H "Content-Type: application/json" \
+  -d @temp-update.json
+# 3. Clean up
+rm temp-update.json
+```
 
 ### Frontmatter (required on all markdown files)
 

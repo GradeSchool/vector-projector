@@ -8,7 +8,8 @@
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
       "Bash(npm run lint)",
-      "Bash(dir C:)"
+      "Bash(dir C:)",
+      "WebSearch"
     ]
   }
 }

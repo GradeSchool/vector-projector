@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Google OAuth credentials (downloaded from Google Cloud Console)
+client_secret_*.json

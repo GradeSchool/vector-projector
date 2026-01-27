@@ -18,6 +18,8 @@ A SaaS app for 3D printing tools. **First app** in a series built using the SaaS
 
 5. **Use import aliases, not relative paths.** Never use `../` patterns in imports. Use `@/` for src imports and `@convex/` for convex imports.
 
+6. **Follow Rules of React for the compiler.** React Compiler is enabled. Never mutate props/state directly, no conditional hooks, keep components pure. See the React Compiler section below.
+
 **Workflow sequence:**
 1. Make code changes
 2. Run build/lint
@@ -85,7 +87,7 @@ Future apps will do less initial buildout - they'll primarily read from the blue
 
 ## Stack
 
-Vite + React + TypeScript + Convex + shadcn/ui + Stripe
+Vite + React 19 + TypeScript + Convex + shadcn/ui + Stripe + **React Compiler**
 
 ## Import Aliases
 
@@ -100,6 +102,57 @@ Vite + React + TypeScript + Convex + shadcn/ui + Stripe
 - `tsconfig.json` - paths for TypeScript
 - `tsconfig.app.json` - paths for app compilation
 - `vite.config.ts` - resolve.alias for Vite bundler
+
+## React Compiler
+
+React Compiler 1.0 is enabled. It automatically memoizes components at build time.
+
+### Rules (MUST follow)
+
+1. **Never mutate state or props directly**
+   ```typescript
+   // BAD - mutating state
+   state.items.push(newItem)
+
+   // GOOD - create new array
+   setItems([...items, newItem])
+   ```
+
+2. **Never call hooks conditionally**
+   ```typescript
+   // BAD
+   if (isLoggedIn) {
+     const user = useUser()
+   }
+
+   // GOOD
+   const user = useUser()  // always call, check result
+   ```
+
+3. **Components must be pure** - same props = same output
+   - No reading from external mutable variables during render
+   - No side effects during render (use `useEffect`)
+
+4. **Don't use `useMemo`/`useCallback`/`React.memo` for performance**
+   - The compiler handles this automatically
+   - Only use these hooks if you need referential stability for non-React reasons
+
+### What the compiler does
+
+- Analyzes data flow and automatically memoizes
+- Handles conditional branches humans miss
+- Zero runtime cost (build-time only)
+
+### Configuration
+
+In `vite.config.ts`:
+```typescript
+react({
+  babel: {
+    plugins: [['babel-plugin-react-compiler', { target: '19' }]],
+  },
+})
+```
 
 ## Architecture
 
@@ -237,6 +290,143 @@ Single-session enforcement: only one active session per user, one tab per browse
 - `src/hooks/useSession.ts` - Client-side session management hook
 - `src/App.tsx` - Session state integration, UI for kicked/duplicate states
 
+## App State (Singleton Pattern)
+
+Global app configuration stored in Convex. Single row enforced via `key="config"` pattern.
+
+### Schema
+
+```typescript
+app_state: defineTable({
+  key: v.string(),           // always "config"
+  crowdfundingActive: v.boolean(),
+}).index("by_key", ["key"])
+```
+
+### How It Works
+
+Convex doesn't have singletons. We simulate one:
+- `key` field is always `"config"`
+- Query filters by `key="config"` - only ever returns one row
+- Mutation does upsert - update if exists, insert if not
+
+Even if extra rows get added accidentally, the query only reads the correct one.
+
+### Managing App State
+
+**Toggle crowdfunding mode:**
+```bash
+npx convex run appState:set '{"crowdfundingActive": true}'
+npx convex run appState:set '{"crowdfundingActive": false}'
+```
+
+Don't manually add rows in dashboard - use the mutation.
+
+### Current Fields
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `crowdfundingActive` | boolean | Shows crowdfunding messaging in onboarding modal |
+
+### Planned Fields
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `emergencyMode` | boolean | Force app into "technical difficulties" state |
+| `maintenanceMessage` | string | Custom message during maintenance |
+
+### Key Files
+
+- `convex/schema.ts` - Table definition
+- `convex/appState.ts` - `get` query, `set` mutation
+
+## Onboarding Modal
+
+First-visit welcome modal. Uses localStorage (user has no account yet).
+
+### Behavior
+
+- Shows on first visit to app
+- Dismissed by clicking "Learn More (FAQ)" or "Just Explore"
+- Once dismissed, never shows again (localStorage `vp_onboarding_seen`)
+- Content changes based on `crowdfundingActive` from app_state
+
+### Crowdfunding Mode
+
+When `crowdfundingActive: true`:
+- "We're currently in Makerworld Crowdfunding Early Access"
+- "Backers can unlock full features..."
+
+When `crowdfundingActive: false`:
+- "A tool for 3D printing enthusiasts"
+- "Explore the demo, sign up to save your work..."
+
+### Key Files
+
+- `src/components/modals/OnboardingModal.tsx` - The modal
+- `src/App.tsx` - State management, localStorage check
+- `convex/appState.ts` - Crowdfunding state query
+
+### Pattern (Reusable Across Apps)
+
+```tsx
+// Check localStorage on mount
+useEffect(() => {
+  const seen = localStorage.getItem('vp_onboarding_seen')
+  if (!seen) setIsOnboardingOpen(true)
+}, [])
+
+// Set flag on close
+const handleOnboardingClose = () => {
+  localStorage.setItem('vp_onboarding_seen', 'true')
+  setIsOnboardingOpen(false)
+}
+```
+
+## Rate Limiting
+
+Using `@convex-dev/rate-limiter` to protect endpoints from abuse.
+
+### Rules Defined (`convex/rateLimiter.ts`)
+
+| Rule | Rate | Algorithm | Key Strategy |
+|------|------|-----------|--------------|
+| `otpVerify` | 5/min | fixed window | IP |
+| `otpSend` | 3/hour | fixed window | Email target |
+| `passwordReset` | 3/hour | fixed window | Email target |
+| `signUp` | 10/hour | fixed window | IP |
+| `signIn` | 20/min | fixed window | IP |
+| `sessionCreate` | 10/min | fixed window | User ID |
+| `projectCreate` | 20/hour | token bucket | User ID |
+| `fileUpload` | 50/hour | token bucket | User ID |
+
+### Applied To
+
+| Mutation | Rule | Key |
+|----------|------|-----|
+| `ensureAppUser` | `sessionCreate` | Auth user ID |
+
+### Usage Pattern
+
+```typescript
+import { rateLimiter } from "./rateLimiter";
+
+const { ok, retryAfter } = await rateLimiter.limit(ctx, "ruleName", { key: userId });
+if (!ok) {
+  throw new Error(`Rate limit exceeded. Try again in ${Math.ceil(retryAfter! / 1000)}s`);
+}
+```
+
+### Not Yet Applied
+
+Better Auth HTTP routes (sign up, sign in, OTP) need Vercel edge middleware or HTTP wrapper.
+
+### Key Files
+
+- `convex/convex.config.ts` - Component registration
+- `convex/rateLimiter.ts` - Rules configuration
+- `convex/users.ts` - Applied to `ensureAppUser`
+
 ## Critical Notes (Pre-Production)
 
 **See blueprint: `core/00-overview/critical-notes.md`**
@@ -245,7 +435,7 @@ Before production launch:
 
 1. **Custom Domain for OAuth** - Set up custom domain for Convex HTTP routes so Google consent screen shows your domain instead of `*.convex.site`
 2. **Bot Protection** - Vercel bot detection, CAPTCHA for signup
-3. **Rate Limiting** - Convex rate limiting for all public endpoints
+3. **Rate Limiting** - Convex rate limiting for all public endpoints (partial - see above)
 4. **Resend Domain** - Already verified (`weheart.art`)
 
 These are HIGH PRIORITY - without them, bots can spam signups and trigger email costs.

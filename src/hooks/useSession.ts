@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '@convex/_generated/api'
 
@@ -36,13 +36,8 @@ export function useSession(isAuthenticated: boolean): UseSessionResult {
   const isSessionValid = sessionValidation?.valid
 
   // Compute wasKicked from validation result or explicit flag
-  const wasKicked = useMemo(() => {
-    if (kickedFlag) return true
-    if (sessionValidation && !sessionValidation.valid && sessionValidation.reason === 'session_invalidated') {
-      return true
-    }
-    return false
-  }, [sessionValidation, kickedFlag])
+  const wasKicked = kickedFlag ||
+    (sessionValidation !== undefined && !sessionValidation.valid && sessionValidation.reason === 'session_invalidated')
 
   // Clear localStorage when kicked (side effect)
   useEffect(() => {
@@ -84,24 +79,24 @@ export function useSession(isAuthenticated: boolean): UseSessionResult {
   }, [sessionId])
 
   // Set session ID (called after sign-in)
-  const setSessionId = useCallback((id: string) => {
+  const setSessionId = (id: string) => {
     localStorage.setItem(SESSION_KEY, id)
     setSessionIdState(id)
     setKickedFlag(false)
-  }, [])
+  }
 
   // Clear session (called on sign-out)
-  const clearSession = useCallback(() => {
+  const clearSession = () => {
     localStorage.removeItem(SESSION_KEY)
     setSessionIdState(null)
     setKickedFlag(false)
-  }, [])
+  }
 
   // Clear kicked state (for dismissing the message)
-  const clearKicked = useCallback(() => {
+  const clearKicked = () => {
     setKickedFlag(false)
-    setSessionIdState(null) // Also clear session state so useMemo recomputes
-  }, [])
+    setSessionIdState(null)
+  }
 
   return {
     sessionId,

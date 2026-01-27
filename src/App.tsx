@@ -4,13 +4,18 @@ import { api } from '@convex/_generated/api'
 import { useSession } from './hooks/useSession'
 import { UserPage } from './components/UserPage'
 import { AdminPage } from './components/AdminPage'
+import { FaqPage } from './components/FaqPage'
+import { PricingPage } from './components/PricingPage'
 import { TestModal } from './components/modals/TestModal'
 import { AuthModal } from './components/modals/AuthModal'
+import { OnboardingModal } from './components/modals/OnboardingModal'
 
 const MIN_WIDTH = 1024
 const MIN_HEIGHT = 768
 
-type Page = 'main' | 'user'
+type Page = 'main' | 'user' | 'faq' | 'pricing'
+
+const ONBOARDING_KEY = 'vp_onboarding_seen'
 
 function App() {
   const { isLoading, isAuthenticated } = useConvexAuth()
@@ -19,6 +24,24 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('main')
   const [isTestModalOpen, setIsTestModalOpen] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | null>(null)
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
+
+  // Show onboarding modal on first visit
+  useEffect(() => {
+    const seen = localStorage.getItem(ONBOARDING_KEY)
+    if (!seen) {
+      setIsOnboardingOpen(true)
+    }
+  }, [])
+
+  const handleOnboardingClose = () => {
+    localStorage.setItem(ONBOARDING_KEY, 'true')
+    setIsOnboardingOpen(false)
+  }
+
+  const handleGoToFaq = () => {
+    setCurrentPage('faq')
+  }
 
   // Session management
   const {
@@ -161,41 +184,43 @@ function App() {
 
         {/* Menu */}
         <div className="flex-1 h-full flex items-center justify-center gap-6 bg-teal-500 text-white">
-          <button className="hover:underline">Pricing</button>
-          <button className="hover:underline">FAQ</button>
+          <button onClick={() => setCurrentPage('pricing')} className="hover:underline">Pricing</button>
+          <button onClick={() => setCurrentPage('faq')} className="hover:underline">FAQ</button>
           <button className="hover:underline">New Project</button>
           <span className="text-white/70">Project Name</span>
           <button className="hover:underline">Save</button>
         </div>
 
-        {/* Auth buttons */}
-        {isLoading ? (
-          <div className="w-32 h-full flex items-center justify-center bg-orange-400 text-white font-medium">
-            ...
-          </div>
-        ) : isAuthenticated && hasValidSession ? (
-          <button
-            onClick={() => setCurrentPage('user')}
-            className="w-20 h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
-          >
-            User
-          </button>
-        ) : (
-          <div className="flex h-full">
+        {/* Auth buttons - fixed width to prevent layout shift */}
+        <div className="w-40 h-full flex shrink-0">
+          {isLoading ? (
+            <div className="w-full h-full flex items-center justify-center bg-orange-400 text-white font-medium">
+              ...
+            </div>
+          ) : isAuthenticated && hasValidSession ? (
             <button
-              onClick={() => setAuthModalMode('signup')}
-              className="px-4 h-full flex items-center justify-center bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors text-sm"
+              onClick={() => setCurrentPage('user')}
+              className="w-full h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
             >
-              Sign Up
+              User
             </button>
-            <button
-              onClick={() => setAuthModalMode('signin')}
-              className="px-4 h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors text-sm"
-            >
-              Sign In
-            </button>
-          </div>
-        )}
+          ) : (
+            <div className="flex w-full h-full">
+              <button
+                onClick={() => setAuthModalMode('signup')}
+                className="flex-1 h-full flex items-center justify-center bg-emerald-500 text-white font-medium hover:bg-emerald-600 transition-colors text-sm"
+              >
+                Sign Up
+              </button>
+              <button
+                onClick={() => setAuthModalMode('signin')}
+                className="flex-1 h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors text-sm"
+              >
+                Sign In
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Page content */}
@@ -211,6 +236,10 @@ function App() {
             onSignOut={handleSignOut}
           />
         )
+      ) : currentPage === 'faq' ? (
+        <FaqPage onBack={() => setCurrentPage('main')} />
+      ) : currentPage === 'pricing' ? (
+        <PricingPage onBack={() => setCurrentPage('main')} />
       ) : (
         /* Main content area */
         <div className="flex flex-1 overflow-hidden">
@@ -276,6 +305,11 @@ function App() {
         onClose={() => setAuthModalMode(null)}
         mode={authModalMode ?? 'signin'}
         onAuthSuccess={handleAuthSuccess}
+      />
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={handleOnboardingClose}
+        onGoToFaq={handleGoToFaq}
       />
     </div>
   )

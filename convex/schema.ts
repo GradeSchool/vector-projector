@@ -24,4 +24,11 @@ export default defineSchema({
     addedAt: v.number(),
     note: v.optional(v.string()), // optional note about why they're admin
   }).index("by_email", ["email"]),
+
+  // App-wide state (singleton pattern)
+  // Uses key="config" to enforce single row via upsert
+  app_state: defineTable({
+    key: v.string(), // always "config"
+    crowdfundingActive: v.boolean(),
+  }).index("by_key", ["key"]),
 });

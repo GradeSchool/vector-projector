@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
+import { rateLimiter } from "./rateLimiter";
 
 
 /**
@@ -16,6 +17,14 @@ export const ensureAppUser = mutation({
     const authUser = await authComponent.getAuthUser(ctx);
     if (!authUser) {
       throw new Error("Not authenticated");
+    }
+
+    // Rate limit by auth user ID (10 per minute)
+    const { ok, retryAfter } = await rateLimiter.limit(ctx, "sessionCreate", {
+      key: authUser._id,
+    });
+    if (!ok) {
+      throw new Error(`Too many sign-in attempts. Try again in ${Math.ceil(retryAfter! / 1000)} seconds.`);
     }
 
     // Check if app user already exists

@@ -49,7 +49,17 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
           return
         }
 
-        // Signup succeeded, now need to verify email
+        // Signup succeeded, now send verification OTP
+        const otpResult = await authClient.emailOtp.sendVerificationOtp({
+          email,
+          type: 'email-verification',
+        })
+
+        if (otpResult.error) {
+          setError(otpResult.error.message || 'Failed to send verification code')
+          return
+        }
+
         setStep('verify')
       } else {
         const result = await authClient.signIn.email({
@@ -84,6 +94,17 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
 
       if (result.error) {
         setError(result.error.message || 'Invalid code')
+        return
+      }
+
+      // Email verified, now sign in automatically
+      const signInResult = await authClient.signIn.email({
+        email,
+        password,
+      })
+
+      if (signInResult.error) {
+        setError(signInResult.error.message || 'Verification succeeded but sign-in failed')
         return
       }
 

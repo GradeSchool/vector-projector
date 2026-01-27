@@ -117,14 +117,67 @@ HeroForge-style SPA. All primary interaction on one page.
 
 Desktop-only. Minimum 1024x768. No mobile support.
 
+## Auth Setup (Better Auth + Convex)
+
+**Read blueprint first:** `core/04-auth/better-auth.md`
+
+### Cross-Domain Setup (Required for React/Vite)
+
+Frontend and backend are different domains:
+- Frontend: `localhost:5173` (dev) or `vectorprojector.weheart.art` (prod)
+- Backend: `*.convex.site`
+
+**Required plugins:**
+- Server: `crossDomain({ siteUrl })` in convex/auth.ts
+- Client: `crossDomainClient()` in src/lib/auth-client.ts
+- HTTP: `{ cors: true }` in convex/http.ts
+
+### ⚠️ Critical: Two Verification Systems
+
+Better Auth has TWO separate email verification systems - they are NOT connected:
+
+1. **Link-based** (`emailVerification.sendVerificationEmail`) - triggered by `requireEmailVerification: true`
+2. **OTP-based** (`emailOTP.sendVerificationOTP`) - must be triggered MANUALLY
+
+We use OTP-based. After `signUp.email()`, you MUST manually call:
+1. `emailOtp.sendVerificationOtp()` - to send the code
+2. After verify: `signIn.email()` - to log the user in
+
+See `src/components/modals/AuthModal.tsx` for working implementation.
+
+### Environment Variables (Convex Dashboard)
+
+- `BETTER_AUTH_SECRET` - session encryption
+- `SITE_URL` - frontend URL (http://localhost:5173 for dev)
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+- `RESEND_API_KEY` - for verification emails
+
+### Google OAuth
+
+Redirect URI must be convex.site:
+```
+https://[deployment].convex.site/api/auth/callback/google
+```
+
+### Current Status
+
+- [x] Google OAuth working (auto-creates account, auto-signs in)
+- [x] Email/password sign-up with OTP verification
+- [x] Auto-sign-in after verification
+- [x] Resend email sending working
+- [ ] Email/password sign-in (not yet tested)
+- [ ] Sign out (not yet tested)
+- [ ] Session enforcement (not yet implemented)
+
 ## Critical Notes (Pre-Production)
 
 **See blueprint: `core/00-overview/critical-notes.md`**
 
-Before production launch, must investigate and implement:
+Before production launch:
 
-1. **Bot Protection** - Vercel bot detection, CAPTCHA for signup
-2. **Rate Limiting** - Convex rate limiting for all public endpoints
-3. **Resend Domain** - Verify domain, update FROM_EMAIL in `convex/emails.ts`
+1. **Custom Domain for OAuth** - Set up custom domain for Convex HTTP routes so Google consent screen shows your domain instead of `*.convex.site`
+2. **Bot Protection** - Vercel bot detection, CAPTCHA for signup
+3. **Rate Limiting** - Convex rate limiting for all public endpoints
+4. **Resend Domain** - Already verified (`weheart.art`)
 
 These are HIGH PRIORITY - without them, bots can spam signups and trigger email costs.

@@ -1,5 +1,6 @@
-import { createClient, type GenericCtx, requireActionCtx } from "@convex-dev/better-auth";
-import { convex } from "@convex-dev/better-auth/plugins";
+import { createClient, type GenericCtx } from "@convex-dev/better-auth";
+import { requireActionCtx } from "@convex-dev/better-auth/utils";
+import { convex, crossDomain } from "@convex-dev/better-auth/plugins";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { query } from "./_generated/server";
@@ -7,14 +8,13 @@ import { betterAuth } from "better-auth";
 import { emailOTP } from "better-auth/plugins";
 import authConfig from "./auth.config";
 
-// For production, set SITE_URL in Convex dashboard environment variables
-const siteUrl = "http://localhost:5173";
+const siteUrl = process.env.SITE_URL!;
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export const createAuth = (ctx: GenericCtx<DataModel>) => {
   return betterAuth({
-    baseURL: siteUrl,
+    trustedOrigins: [siteUrl],
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,
@@ -27,6 +27,7 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       },
     },
     plugins: [
+      crossDomain({ siteUrl }),
       convex({ authConfig }),
       emailOTP({
         otpLength: 6,

@@ -6,8 +6,7 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Email sender - for production, update this to your verified domain
-const FROM_EMAIL = "Vector Projector <noreply@yourdomain.com>";
+const FROM_EMAIL = "Vector Projector <noreply@weheart.art>";
 
 // =============================================================================
 // EMAIL TEMPLATES

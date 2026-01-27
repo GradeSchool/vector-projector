@@ -10,7 +10,18 @@ export default defineSchema({
     email: v.string(),
     name: v.optional(v.string()),
     createdAt: v.number(),
+    // Session enforcement - only one active session per user
+    activeSessionId: v.optional(v.string()),
+    sessionStartedAt: v.optional(v.number()),
   })
     .index("by_authUserId", ["authUserId"])
     .index("by_email", ["email"]),
+
+  // Admin whitelist - manually managed
+  // Users with emails in this table have admin privileges
+  admins: defineTable({
+    email: v.string(),
+    addedAt: v.number(),
+    note: v.optional(v.string()), // optional note about why they're admin
+  }).index("by_email", ["email"]),
 });

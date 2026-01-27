@@ -16,6 +16,8 @@ A SaaS app for 3D printing tools. **First app** in a series built using the SaaS
 
 4. **Wait for user verification BEFORE updating the blueprint.** Do not POST to the blueprint API until the user has tested and confirmed the code works. Adding incorrect or non-functioning information to the blueprint creates extra cleanup work.
 
+5. **Use import aliases, not relative paths.** Never use `../` patterns in imports. Use `@/` for src imports and `@convex/` for convex imports.
+
 **Workflow sequence:**
 1. Make code changes
 2. Run build/lint
@@ -84,6 +86,20 @@ Future apps will do less initial buildout - they'll primarily read from the blue
 ## Stack
 
 Vite + React + TypeScript + Convex + shadcn/ui + Stripe
+
+## Import Aliases
+
+**Never use relative imports with `../` patterns.** Use path aliases instead.
+
+| Alias | Path | Example |
+|-------|------|---------|
+| `@/*` | `./src/*` | `import { Modal } from '@/components/Modal'` |
+| `@convex/*` | `./convex/*` | `import { api } from '@convex/_generated/api'` |
+
+**Configuration files:**
+- `tsconfig.json` - paths for TypeScript
+- `tsconfig.app.json` - paths for app compilation
+- `vite.config.ts` - resolve.alias for Vite bundler
 
 ## Architecture
 
@@ -161,13 +177,65 @@ https://[deployment].convex.site/api/auth/callback/google
 
 ### Current Status
 
+**Auth Flows:**
 - [x] Google OAuth working (auto-creates account, auto-signs in)
 - [x] Email/password sign-up with OTP verification
 - [x] Auto-sign-in after verification
+- [x] Email/password sign-in working
+- [x] Password reset flow working
+- [x] Sign out working (no flicker)
 - [x] Resend email sending working
-- [ ] Email/password sign-in (not yet tested)
-- [ ] Sign out (not yet tested)
-- [ ] Session enforcement (not yet implemented)
+
+**App Users & Admins:**
+- [x] App `users` table created on sign-in (via `ensureAppUser`)
+- [x] `admins` table for email whitelist
+- [x] Admin detection on sign-in (`isAdmin` flag)
+- [x] AdminPage shown for admins, UserPage for regular users
+
+**Session Enforcement:**
+- [x] Single session per user (cross-device kick)
+- [x] Duplicate tab detection (same browser)
+
+## Session Enforcement
+
+Single-session enforcement: only one active session per user, one tab per browser.
+
+### Architecture
+
+**Database fields** (on `users` table):
+- `activeSessionId: string` - UUID of the current valid session
+- `sessionStartedAt: number` - timestamp when session started
+
+**Server-side** (`convex/users.ts`):
+- `ensureAppUser` mutation: Creates/updates app user, generates new `activeSessionId`, invalidates any previous session
+- `validateSession` query: Checks if provided `sessionId` matches `activeSessionId` in database
+
+**Client-side** (`src/hooks/useSession.ts`):
+- Stores `sessionId` in localStorage (`vp_session_id`)
+- Uses Convex reactive query to validate session against server
+- BroadcastChannel API for same-browser duplicate tab detection
+- Returns `wasKicked: true` when session is invalidated by another sign-in
+
+### Flow
+
+1. **Sign-in**: `ensureAppUser` generates new `sessionId`, stores in DB and returns to client
+2. **Client stores**: `sessionId` saved to localStorage, `useSession` hook tracks it
+3. **Validation**: `validateSession` query runs reactively, comparing localStorage `sessionId` to DB `activeSessionId`
+4. **Cross-device kick**: When user signs in elsewhere, DB `activeSessionId` changes, original session's query returns `session_invalidated`
+5. **Duplicate tab**: BroadcastChannel messages detect other tabs with same session, newer tab shows warning
+
+### UI States
+
+- **Duplicate Tab**: Yellow warning screen, "Please use that tab instead"
+- **Session Ended (kicked)**: Red warning screen with "Sign In Again" button
+- Both states prevent access to app content
+
+### Key Files
+
+- `convex/users.ts` - `ensureAppUser`, `validateSession`
+- `convex/schema.ts` - `activeSessionId`, `sessionStartedAt` fields
+- `src/hooks/useSession.ts` - Client-side session management hook
+- `src/App.tsx` - Session state integration, UI for kicked/duplicate states
 
 ## Critical Notes (Pre-Production)
 

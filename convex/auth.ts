@@ -32,11 +32,13 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
       emailOTP({
         otpLength: 6,
         expiresIn: 600, // 10 minutes
-        async sendVerificationOTP({ email, otp }) {
+        async sendVerificationOTP({ email, otp, type }) {
           const actionCtx = requireActionCtx(ctx);
+          // Use different template based on OTP type
+          const template = type === "forget-password" ? "password-reset" : "verification";
           await actionCtx.runAction(internal.emails.sendTemplateEmail, {
             to: email,
-            template: "verification",
+            template,
             variables: { code: otp },
           });
         },

@@ -1,4 +1,4 @@
-import { Modal } from '../Modal'
+import { Modal } from '@/components/Modal'
 
 interface TestModalProps {
   isOpen: boolean

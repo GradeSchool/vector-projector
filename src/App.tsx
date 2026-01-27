@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useConvexAuth } from 'convex/react'
+import { useConvexAuth, useMutation } from 'convex/react'
+import { api } from '@convex/_generated/api'
+import { useSession } from './hooks/useSession'
 import { UserPage } from './components/UserPage'
+import { AdminPage } from './components/AdminPage'
 import { TestModal } from './components/modals/TestModal'
 import { AuthModal } from './components/modals/AuthModal'
 
@@ -17,6 +20,70 @@ function App() {
   const [isTestModalOpen, setIsTestModalOpen] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | null>(null)
 
+  // Session management
+  const {
+    sessionId,
+    isSessionValid,
+    isDuplicateTab,
+    wasKicked,
+    clearKicked,
+    setSessionId,
+    clearSession,
+  } = useSession(isAuthenticated)
+
+  // App user state from session validation or direct query
+  const [appUser, setAppUser] = useState<{
+    userId: string
+    email: string
+    name?: string
+    isAdmin: boolean
+  } | null>(null)
+
+  const ensureAppUser = useMutation(api.users.ensureAppUser)
+
+  // Create app user and session if authenticated but no session exists
+  useEffect(() => {
+    if (isAuthenticated && !sessionId && !wasKicked) {
+      // No session - need to create one (e.g., after Google OAuth redirect)
+      ensureAppUser().then((result) => {
+        setSessionId(result.sessionId)
+        setAppUser({
+          userId: result.userId,
+          email: result.email,
+          name: result.name,
+          isAdmin: result.isAdmin,
+        })
+      })
+    }
+  }, [isAuthenticated, sessionId, wasKicked, ensureAppUser, setSessionId])
+
+  // Compute effective app user - null if kicked or not authenticated
+  const effectiveAppUser = (wasKicked || !isAuthenticated) ? null : appUser
+
+  // Handle sign out - clear session
+  const handleSignOut = () => {
+    clearSession()
+    setAppUser(null)
+    setCurrentPage('main')
+  }
+
+  // Handle successful sign-in from modal
+  const handleAuthSuccess = (result: {
+    userId: string
+    email: string
+    name?: string
+    isAdmin: boolean
+    sessionId: string
+  }) => {
+    setSessionId(result.sessionId)
+    setAppUser({
+      userId: result.userId,
+      email: result.email,
+      name: result.name,
+      isAdmin: result.isAdmin,
+    })
+  }
+
   useEffect(() => {
     const check = () => setTooSmall(
       window.innerWidth < MIN_WIDTH || window.innerHeight < MIN_HEIGHT
@@ -26,6 +93,43 @@ function App() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
+  // Show duplicate tab warning
+  if (isDuplicateTab) {
+    return (
+      <div className="flex h-screen items-center justify-center p-8 text-center bg-amber-50">
+        <div>
+          <h1 className="text-xl font-semibold mb-2 text-amber-800">Duplicate Tab</h1>
+          <p className="text-amber-700">
+            You already have this app open in another tab.
+            <br />
+            Please use that tab instead.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show kicked message
+  if (wasKicked) {
+    return (
+      <div className="flex h-screen items-center justify-center p-8 text-center bg-red-50">
+        <div>
+          <h1 className="text-xl font-semibold mb-2 text-red-800">Session Ended</h1>
+          <p className="text-red-700 mb-4">
+            You signed in on another device.
+            <br />
+            Only one session is allowed at a time.
+          </p>
+          <button
+            onClick={clearKicked}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Sign In Again
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (tooSmall) {
     return (
@@ -39,6 +143,9 @@ function App() {
       </div>
     )
   }
+
+  // Check if session is valid (only matters if authenticated)
+  const hasValidSession = !isAuthenticated || isSessionValid !== false
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -66,7 +173,7 @@ function App() {
           <div className="w-32 h-full flex items-center justify-center bg-orange-400 text-white font-medium">
             ...
           </div>
-        ) : isAuthenticated ? (
+        ) : isAuthenticated && hasValidSession ? (
           <button
             onClick={() => setCurrentPage('user')}
             className="w-20 h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
@@ -93,10 +200,17 @@ function App() {
 
       {/* Page content */}
       {currentPage === 'user' ? (
-        <UserPage
-          onBack={() => setCurrentPage('main')}
-          onSignOut={() => setCurrentPage('main')}
-        />
+        effectiveAppUser?.isAdmin ? (
+          <AdminPage
+            onBack={() => setCurrentPage('main')}
+            onSignOut={handleSignOut}
+          />
+        ) : (
+          <UserPage
+            onBack={() => setCurrentPage('main')}
+            onSignOut={handleSignOut}
+          />
+        )
       ) : (
         /* Main content area */
         <div className="flex flex-1 overflow-hidden">
@@ -161,6 +275,7 @@ function App() {
         isOpen={authModalMode !== null}
         onClose={() => setAuthModalMode(null)}
         mode={authModalMode ?? 'signin'}
+        onAuthSuccess={handleAuthSuccess}
       />
     </div>
   )

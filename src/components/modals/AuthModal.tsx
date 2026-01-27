@@ -1,23 +1,64 @@
 import { useState, useEffect } from 'react'
-import { Modal } from '../Modal'
-import { authClient } from '../../lib/auth-client'
+import { useMutation } from 'convex/react'
+import { api } from '@convex/_generated/api'
+import { Modal } from '@/components/Modal'
+import { authClient } from '@/lib/auth-client'
+
+interface AuthSuccessResult {
+  userId: string
+  email: string
+  name?: string
+  isAdmin: boolean
+  sessionId: string
+}
 
 interface AuthModalProps {
   isOpen: boolean
   onClose: () => void
   mode: 'signin' | 'signup'
+  onAuthSuccess?: (result: AuthSuccessResult) => void
 }
 
-type Step = 'form' | 'verify'
+type Step = 'form' | 'verify' | 'reset' | 'reset-success'
 
-export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
+// Password validation helper
+function isValidPassword(password: string): boolean {
+  return (
+    password.length >= 12 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)
+  )
+}
+
+// Spam folder callout component
+function SpamCallout() {
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+      <strong>Check your spam folder</strong> if you don't see the email in your inbox.
+    </div>
+  )
+}
+
+interface FieldErrors {
+  name?: string
+  email?: string
+  password?: string
+}
+
+export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalProps) {
   const [step, setStep] = useState<Step>('form')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(false)
+
+  const ensureAppUser = useMutation(api.users.ensureAppUser)
 
   // Reset form when modal opens/closes or mode changes
   useEffect(() => {
@@ -25,15 +66,71 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
       setStep('form')
       setEmail('')
       setPassword('')
+      setNewPassword('')
       setName('')
       setCode('')
       setError('')
+      setFieldErrors({})
     }
   }, [isOpen, mode])
+
+  // Clear field error when user types
+  const handleNameChange = (value: string) => {
+    setName(value)
+    if (fieldErrors.name) setFieldErrors(prev => ({ ...prev, name: undefined }))
+  }
+
+  const handleEmailChange = (value: string) => {
+    setEmail(value)
+    if (fieldErrors.email) setFieldErrors(prev => ({ ...prev, email: undefined }))
+  }
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value)
+    if (fieldErrors.password) setFieldErrors(prev => ({ ...prev, password: undefined }))
+  }
+
+  // Validate form fields before submit
+  const validateForm = (): boolean => {
+    const errors: FieldErrors = {}
+
+    if (mode === 'signup' && !name.trim()) {
+      errors.name = 'Name is required'
+    }
+
+    if (!email.trim()) {
+      errors.email = 'Email is required'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = 'Please enter a valid email'
+    }
+
+    if (!password) {
+      errors.password = 'Password is required'
+    } else {
+      const passwordErrors: string[] = []
+      if (password.length < 12) passwordErrors.push('12+ characters')
+      if (!/[A-Z]/.test(password)) passwordErrors.push('uppercase')
+      if (!/[a-z]/.test(password)) passwordErrors.push('lowercase')
+      if (!/[0-9]/.test(password)) passwordErrors.push('number')
+      if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) passwordErrors.push('special character')
+      if (passwordErrors.length > 0) {
+        errors.password = `Missing: ${passwordErrors.join(', ')}`
+      }
+    }
+
+    setFieldErrors(errors)
+    return Object.keys(errors).length === 0
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    // Validate before submitting
+    if (!validateForm()) {
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -45,7 +142,21 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
         })
 
         if (result.error) {
-          setError(result.error.message || 'Something went wrong')
+          // Try to map server errors to fields (check specific errors first)
+          const msg = result.error.message || 'Something went wrong'
+          const msgLower = msg.toLowerCase()
+
+          if (msgLower.includes('already exists') || msgLower.includes('already registered') || msgLower.includes('user already')) {
+            setFieldErrors(prev => ({ ...prev, email: 'An account with this email already exists' }))
+          } else if (msg.includes('[body.name]') || (msgLower.includes('name') && !msgLower.includes('email'))) {
+            setFieldErrors(prev => ({ ...prev, name: 'Name is required' }))
+          } else if (msg.includes('[body.email]')) {
+            setFieldErrors(prev => ({ ...prev, email: 'Please enter a valid email' }))
+          } else if (msg.includes('[body.password]') || msgLower.includes('password')) {
+            setFieldErrors(prev => ({ ...prev, password: 'Password does not meet requirements' }))
+          } else {
+            setError(msg)
+          }
           return
         }
 
@@ -62,16 +173,32 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
 
         setStep('verify')
       } else {
-        const result = await authClient.signIn.email({
+        const signInResult = await authClient.signIn.email({
           email,
           password,
         })
 
-        if (result.error) {
-          setError(result.error.message || 'Something went wrong')
+        if (signInResult.error) {
+          const msg = signInResult.error.message || 'Something went wrong'
+          // Common sign-in errors
+          if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('credentials')) {
+            setError('Invalid email or password')
+          } else if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no user')) {
+            setError('No account found with this email')
+          } else if (msg.toLowerCase().includes('not verified')) {
+            setError('Please verify your email first')
+          } else {
+            setError(msg)
+          }
           return
         }
 
+        // Create app user if needed, check admin status, start session
+        const appUserResult = await ensureAppUser()
+
+        if (onAuthSuccess) {
+          onAuthSuccess(appUserResult)
+        }
         onClose()
       }
     } catch (err) {
@@ -87,13 +214,13 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
     setLoading(true)
 
     try {
-      const result = await authClient.emailOtp.verifyEmail({
+      const verifyResult = await authClient.emailOtp.verifyEmail({
         email,
         otp: code,
       })
 
-      if (result.error) {
-        setError(result.error.message || 'Invalid code')
+      if (verifyResult.error) {
+        setError(verifyResult.error.message || 'Invalid code')
         return
       }
 
@@ -108,6 +235,12 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
         return
       }
 
+      // Create app user if needed, check admin status, start session
+      const appUserResult = await ensureAppUser()
+
+      if (onAuthSuccess) {
+        onAuthSuccess(appUserResult)
+      }
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -136,6 +269,72 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
     }
   }
 
+  const handleForgotPassword = async () => {
+    if (!email) return
+
+    setError('')
+    setLoading(true)
+
+    try {
+      // Try to send reset OTP - silently handle errors for security
+      // (don't reveal if account exists or not)
+      await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'forget-password',
+      })
+    } catch {
+      // Silently ignore errors - don't reveal account existence
+    } finally {
+      setLoading(false)
+      // Always show reset step regardless of whether email was sent
+      setCode('')
+      setNewPassword('')
+      setStep('reset')
+    }
+  }
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+
+    try {
+      const result = await authClient.emailOtp.resetPassword({
+        email,
+        otp: code,
+        password: newPassword,
+      })
+
+      if (result.error) {
+        setError(result.error.message || 'Invalid code or password reset failed')
+        return
+      }
+
+      // Success - show success message
+      setStep('reset-success')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResendResetCode = async () => {
+    setError('')
+    setLoading(true)
+
+    try {
+      await authClient.emailOtp.sendVerificationOtp({
+        email,
+        type: 'forget-password',
+      })
+    } catch {
+      // Silently ignore - don't reveal account existence
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleGoogleSignIn = async () => {
     setError('')
     setLoading(true)
@@ -148,6 +347,97 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
     }
   }
 
+  // Password reset success step
+  if (step === 'reset-success') {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Password Reset">
+        <div className="space-y-4 text-center">
+          <div className="text-green-600 text-4xl">✓</div>
+          <p className="text-sm text-gray-600">
+            Your password has been reset successfully.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setStep('form')
+              setPassword('')
+              setCode('')
+            }}
+            className="w-full px-4 py-2 text-sm bg-sky-500 text-white rounded hover:bg-sky-600"
+          >
+            Sign In
+          </button>
+        </div>
+      </Modal>
+    )
+  }
+
+  // Password reset step
+  if (step === 'reset') {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Reset Password">
+        <form onSubmit={handleResetPassword} className="space-y-3">
+          <p className="text-sm text-gray-600">
+            If an account with a password exists for <strong>{email}</strong>, we've sent a 6-digit code.
+          </p>
+
+          <SpamCallout />
+
+          <input
+            type="text"
+            placeholder="Enter 6-digit code"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+            required
+            maxLength={6}
+            className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500 text-center text-2xl tracking-widest"
+          />
+
+          <div>
+            <input
+              type="password"
+              placeholder="New password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">12+ chars, uppercase, lowercase, number, special</p>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-500 bg-red-50 p-2 rounded">{error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || code.length !== 6 || !isValidPassword(newPassword)}
+            className="w-full px-4 py-2 text-sm bg-sky-500 text-white rounded hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Resetting...' : 'Reset Password'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleResendResetCode}
+            disabled={loading}
+            className="w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-800 disabled:opacity-50"
+          >
+            Resend code
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStep('form')}
+            className="w-full px-4 py-2 text-sm text-gray-500 hover:text-gray-700"
+          >
+            ← Back to sign in
+          </button>
+        </form>
+      </Modal>
+    )
+  }
+
   // Verification step
   if (step === 'verify') {
     return (
@@ -156,6 +446,9 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
           <p className="text-sm text-gray-600">
             We sent a 6-digit code to <strong>{email}</strong>
           </p>
+
+          <SpamCallout />
+
           <input
             type="text"
             placeholder="Enter code"
@@ -237,31 +530,62 @@ export function AuthModal({ isOpen, onClose, mode }: AuthModalProps) {
 
         <form onSubmit={handleSubmit} className="space-y-3">
         {mode === 'signup' && (
-          <input
-            type="text"
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500"
-          />
+          <div>
+            <input
+              type="text"
+              placeholder="Name"
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
+              className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+                fieldErrors.name ? 'border-red-400' : ''
+              }`}
+            />
+            {fieldErrors.name && (
+              <p className="text-xs text-red-500 mt-1">{fieldErrors.name}</p>
+            )}
+          </div>
         )}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500"
-        />
-        <input
-          type="password"
-          placeholder="Password (min 8 characters)"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500"
-        />
+        <div>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => handleEmailChange(e.target.value)}
+            className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+              fieldErrors.email ? 'border-red-400' : ''
+            }`}
+          />
+          {fieldErrors.email && (
+            <p className="text-xs text-red-500 mt-1">{fieldErrors.email}</p>
+          )}
+        </div>
+        <div>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => handlePasswordChange(e.target.value)}
+            className={`w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-sky-500 ${
+              fieldErrors.password ? 'border-red-400' : ''
+            }`}
+          />
+          {fieldErrors.password ? (
+            <p className="text-xs text-red-500 mt-1">{fieldErrors.password}</p>
+          ) : (
+            <p className="text-xs text-gray-400 mt-1">12+ chars, uppercase, lowercase, number, special</p>
+          )}
+        </div>
+
+        {mode === 'signin' && (
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            disabled={loading || !email}
+            className="text-sm text-sky-600 hover:text-sky-800 disabled:text-gray-400 disabled:cursor-not-allowed"
+          >
+            {email ? 'Forgot password?' : 'Forgot password? Enter your email above'}
+          </button>
+        )}
 
         {error && (
           <p className="text-sm text-red-500 bg-red-50 p-2 rounded">{error}</p>

@@ -35,6 +35,26 @@ const TEMPLATES = {
 </html>
     `.trim(),
   },
+  "password-reset": {
+    subject: "Reset your password",
+    html: `
+<!DOCTYPE html>
+<html>
+<head></head>
+<body style="background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="margin:0 auto;padding:40px 20px;">
+    <div style="background-color:#ffffff;border-radius:8px;padding:32px;text-align:center;">
+      <h1 style="color:#18181b;font-size:24px;font-weight:600;margin:0 0 16px;">Reset your password</h1>
+      <p style="color:#52525b;font-size:16px;margin:0 0 24px;">Enter this code to reset your password:</p>
+      <p style="background-color:#f4f4f5;border-radius:8px;color:#18181b;display:inline-block;font-size:32px;font-weight:700;letter-spacing:4px;margin:0 0 24px;padding:16px 32px;">{{code}}</p>
+      <p style="color:#a1a1aa;font-size:14px;margin:0;">This code expires in 10 minutes.</p>
+      <p style="color:#a1a1aa;font-size:14px;margin:16px 0 0;">If you didn't request this, you can safely ignore this email.</p>
+    </div>
+  </div>
+</body>
+</html>
+    `.trim(),
+  },
 } as const;
 
 type TemplateKey = keyof typeof TEMPLATES;
@@ -82,7 +102,7 @@ export const sendTemplateEmail = internalAction({
 
     // Substitute variables
     let html = tmpl.html;
-    let subject = tmpl.subject;
+    let subject: string = tmpl.subject;
     for (const [key, value] of Object.entries(variables)) {
       html = html.replaceAll(`{{${key}}}`, value);
       subject = subject.replaceAll(`{{${key}}}`, value);

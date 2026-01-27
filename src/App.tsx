@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useConvexAuth, useMutation } from 'convex/react'
+import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '@convex/_generated/api'
 import { useSession } from './hooks/useSession'
 import { UserPage } from './components/UserPage'
@@ -9,6 +9,7 @@ import { PricingPage } from './components/PricingPage'
 import { TestModal } from './components/modals/TestModal'
 import { AuthModal } from './components/modals/AuthModal'
 import { OnboardingModal } from './components/modals/OnboardingModal'
+import { authClient } from '@/lib/auth-client'
 
 const MIN_WIDTH = 1024
 const MIN_HEIGHT = 768
@@ -25,6 +26,8 @@ function App() {
   const [isTestModalOpen, setIsTestModalOpen] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | null>(null)
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
+  const [isEnsuringUser, setIsEnsuringUser] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   // Show onboarding modal on first visit
   useEffect(() => {
@@ -33,6 +36,7 @@ function App() {
       setIsOnboardingOpen(true)
     }
   }, [])
+
 
   const handleOnboardingClose = () => {
     localStorage.setItem(ONBOARDING_KEY, 'true')
@@ -63,31 +67,77 @@ function App() {
   } | null>(null)
 
   const ensureAppUser = useMutation(api.users.ensureAppUser)
+  const appUserQuery = useQuery(
+    api.users.getCurrentAppUser,
+    isAuthenticated && sessionId ? {} : "skip"
+  )
 
   // Create app user and session if authenticated but no session exists
   useEffect(() => {
     if (isAuthenticated && !sessionId && !wasKicked) {
+      let isActive = true
       // No session - need to create one (e.g., after Google OAuth redirect)
-      ensureAppUser().then((result) => {
-        setSessionId(result.sessionId)
-        setAppUser({
-          userId: result.userId,
-          email: result.email,
-          name: result.name,
-          isAdmin: result.isAdmin,
+      setIsEnsuringUser(true)
+      ensureAppUser()
+        .then((result) => {
+          if (!isActive) return
+          setSessionId(result.sessionId)
+          setAppUser({
+            userId: result.userId,
+            email: result.email,
+            name: result.name,
+            isAdmin: result.isAdmin,
+          })
         })
-      })
+        .catch((err) => {
+          console.error('Failed to establish session:', err)
+        })
+        .finally(() => {
+          if (!isActive) return
+          setIsEnsuringUser(false)
+        })
+      return () => {
+        isActive = false
+      }
     }
   }, [isAuthenticated, sessionId, wasKicked, ensureAppUser, setSessionId])
+
+  useEffect(() => {
+    if (!isAuthenticated || wasKicked) {
+      setAppUser(null)
+      return
+    }
+    if (appUserQuery === undefined) return
+    if (appUserQuery === null) {
+      setAppUser(null)
+      return
+    }
+    setAppUser({
+      userId: appUserQuery.userId,
+      email: appUserQuery.email,
+      name: appUserQuery.name,
+      isAdmin: appUserQuery.isAdmin,
+    })
+  }, [appUserQuery, isAuthenticated, wasKicked])
+
 
   // Compute effective app user - null if kicked or not authenticated
   const effectiveAppUser = (wasKicked || !isAuthenticated) ? null : appUser
 
   // Handle sign out - clear session
-  const handleSignOut = () => {
-    clearSession()
-    setAppUser(null)
-    setCurrentPage('main')
+  const handleSignOut = async () => {
+    if (isSigningOut) return
+    setIsSigningOut(true)
+    try {
+      await authClient.signOut()
+    } catch (err) {
+      console.error('Sign out failed:', err)
+    } finally {
+      clearSession()
+      setAppUser(null)
+      setCurrentPage('main')
+      setIsSigningOut(false)
+    }
   }
 
   // Handle successful sign-in from modal
@@ -168,7 +218,12 @@ function App() {
   }
 
   // Check if session is valid (only matters if authenticated)
-  const hasValidSession = !isAuthenticated || isSessionValid !== false
+  const hasValidSession = !isAuthenticated || isSessionValid === true
+  const isSessionValidationPending = isAuthenticated && !!sessionId && isSessionValid === undefined
+  const isAppUserLoading = isAuthenticated && !!sessionId && appUserQuery === undefined
+  const isAuthResolving = isLoading || isEnsuringUser || isSigningOut || isSessionValidationPending || isAppUserLoading
+  const shouldShowUser = !isAuthResolving && isAuthenticated && hasValidSession && !!effectiveAppUser
+  const shouldShowSignedOut = !isAuthenticated && !sessionId
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -193,18 +248,14 @@ function App() {
 
         {/* Auth buttons - fixed width to prevent layout shift */}
         <div className="w-40 h-full flex shrink-0">
-          {isLoading ? (
-            <div className="w-full h-full flex items-center justify-center bg-orange-400 text-white font-medium">
-              ...
-            </div>
-          ) : isAuthenticated && hasValidSession ? (
+          {shouldShowUser ? (
             <button
               onClick={() => setCurrentPage('user')}
               className="w-full h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
             >
               User
             </button>
-          ) : (
+          ) : shouldShowSignedOut ? (
             <div className="flex w-full h-full">
               <button
                 onClick={() => setAuthModalMode('signup')}
@@ -219,6 +270,13 @@ function App() {
                 Sign In
               </button>
             </div>
+          ) : (
+            <button
+              disabled
+              className="w-full h-full flex items-center justify-center bg-orange-400/80 text-white font-medium cursor-not-allowed"
+            >
+              User
+            </button>
           )}
         </div>
       </header>

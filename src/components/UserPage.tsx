@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { authClient } from '@/lib/auth-client'
 
 interface UserPageProps {
   onBack: () => void
-  onSignOut: () => void
+  onSignOut: () => Promise<void>
 }
 
 export function UserPage({ onBack, onSignOut }: UserPageProps) {
@@ -11,11 +10,8 @@ export function UserPage({ onBack, onSignOut }: UserPageProps) {
 
   const handleSignOut = async () => {
     setSigningOut(true)
-    onSignOut() // Navigate away first to avoid flicker
     try {
-      await authClient.signOut()
-    } catch (err) {
-      console.error('Sign out failed:', err)
+      await onSignOut()
     } finally {
       setSigningOut(false)
     }

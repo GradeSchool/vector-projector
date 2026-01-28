@@ -402,7 +402,10 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
       })
 
       if (!result.valid) {
-        if (result.reason === 'already_used') {
+        if (result.reason === 'rate_limited') {
+          const retryAfter = 'retryAfter' in result ? result.retryAfter : 60
+          setError(`Too many attempts. Please try again in ${retryAfter} seconds.`)
+        } else if (result.reason === 'already_used') {
           setError('This backer code has already been used to create an account.')
         } else {
           setError('Invalid username or access code. Please check your backer confirmation.')

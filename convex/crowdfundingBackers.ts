@@ -1,13 +1,15 @@
 import { v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
+import { rateLimiter } from "./rateLimiter";
 
 /**
  * Add a backer to the crowdfunding_backers table.
+ * INTERNAL ONLY - cannot be called from client.
  * For admin/CLI use to populate the backer list.
  *
  * Usage: npx convex run crowdfundingBackers:addBacker '{"username": "user123", "accessCode": "ABC123", "tier": "Gold"}'
  */
-export const addBacker = mutation({
+export const addBacker = internalMutation({
   args: {
     username: v.string(),
     accessCode: v.string(),
@@ -40,6 +42,8 @@ export const addBacker = mutation({
  * Verify a backer's credentials against the crowdfunding_backers table.
  * Returns the backer record if valid, error info if not.
  *
+ * Rate limited to prevent brute-forcing access codes.
+ *
  * Note: This is a mutation (not query) so it can be called imperatively
  * from form submission handlers on the client.
  */
@@ -49,6 +53,18 @@ export const verifyBacker = mutation({
     accessCode: v.string(),
   },
   handler: async (ctx, args) => {
+    // Rate limit by username to prevent brute-forcing codes for a specific user
+    const { ok, retryAfter } = await rateLimiter.limit(ctx, "backerVerify", {
+      key: args.username.toLowerCase(),
+    });
+    if (!ok) {
+      return {
+        valid: false as const,
+        reason: "rate_limited" as const,
+        retryAfter: Math.ceil(retryAfter! / 1000),
+      };
+    }
+
     const backer = await ctx.db
       .query("crowdfunding_backers")
       .withIndex("by_username_code", (q) =>

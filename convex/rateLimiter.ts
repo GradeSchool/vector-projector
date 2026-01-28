@@ -38,6 +38,10 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
   // 20 per minute per IP (higher because typos happen)
   signIn: { kind: "fixed window", rate: 20, period: MINUTE },
 
+  // Backer verification: Prevent brute-forcing access codes
+  // 5 attempts per minute per username
+  backerVerify: { kind: "fixed window", rate: 5, period: MINUTE },
+
   // ===================
   // APP MUTATIONS
   // ===================

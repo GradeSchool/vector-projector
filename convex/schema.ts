@@ -15,9 +15,18 @@ export default defineSchema({
     sessionStartedAt: v.optional(v.number()),
     // Crowdfunding backer link (for tier-based billing discounts)
     crowdfundingBackerId: v.optional(v.id("crowdfunding_backers")),
+    // Alert tracking - timestamp of last seen alert
+    lastSeenAlertAt: v.optional(v.number()),
   })
     .index("by_authUserId", ["authUserId"])
     .index("by_email", ["email"]),
+
+  // Admin alerts - broadcast messages to all users
+  alerts: defineTable({
+    message: v.string(), // Alert text (can include emojis)
+    createdAt: v.number(),
+    createdBy: v.id("users"), // Admin who sent it
+  }).index("by_createdAt", ["createdAt"]),
 
   // Crowdfunding backers - verified MakerWorld supporters
   // Populated manually or via import before crowdfunding period

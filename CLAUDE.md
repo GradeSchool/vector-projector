@@ -162,17 +162,25 @@ HeroForge-style SPA. All primary interaction on one page.
 
 ```
 ┌─────────────┬────────────────────────────┬───────┐
-│    LOGO     │   MENU (Pricing, FAQ...)   │ USER  │
-├──┬──┬──┬──┬─┴────────────────────────────┴───────┤
-│1 │2 │3 │4 │5 │6 │                                │
-├──┴──┴──┴──┴─────┤                                │
-│    UPDATES      │                                │
-├─────────────────┤           SCENE                │
-│                 │        (3D view)               │
-│     PANEL       │                                │
-│                 │                                │
-└─────────────────┴────────────────────────────────┘
+│    LOGO     │   MENU (navigation only)   │ USER  │
+├──┬──┬──┬──┬─┴─┬──────────────────────────┴───────┤
+│1 │2 │3 │4 │5 │6│ New Project | Name | Save       │
+├──┴──┴──┴──┴───┼──────────────────────────────────┤
+│    UPDATES    │                                  │
+├───────────────┤           SCENE                  │
+│               │        (3D view)                 │
+│     PANEL     │                                  │
+│               │                                  │
+└───────────────┴──────────────────────────────────┘
 ```
+
+### Zone Responsibilities (Core Pattern)
+
+**Header Menu** - Navigation only. Links to informational pages (Pricing, FAQ). Do NOT put project controls or tools here.
+
+**Sidebar (Steps)** - App tools. The numbered steps (1-6) control which tool panel is shown. These are the tools users interact with to build/create.
+
+**Scene Toolbar** - Project controls. New Project, Project Name, Save. Manages project lifecycle, separate from app tools.
 
 ### Rules
 
@@ -487,6 +495,37 @@ const handleOnboardingClose = () => {
   localStorage.setItem('vp_onboarding_seen', 'true')
   setIsOnboardingOpen(false)
 }
+```
+
+## Alerts
+
+Admin-to-user broadcast messaging. Admins can send announcements that all users see.
+
+**See blueprint:** `core/02-frontend/alerts.md`
+
+### Behavior
+
+| Rule | Description |
+|------|-------------|
+| 24-hour expiry | Alerts auto-expire, no cleanup needed |
+| All active shown | Users see list of all non-expired alerts |
+| Red dot indicator | Shows on User button when unread |
+| Auto-mark read | Visiting User page marks as seen |
+
+### Key Files
+
+- `convex/schema.ts` - `alerts` table, `lastSeenAlertAt` on users
+- `convex/alerts.ts` - `getActive`, `hasUnread`, `create`, `markAsRead`
+- `src/App.tsx` - Red dot indicator
+- `src/components/UserPage.tsx` - Alert display
+- `src/components/AdminPage.tsx` - Alert writer with emoji picker
+
+### Emoji Picker
+
+Uses [Frimousse](https://frimousse.liveblocks.io/) via shadcn CLI:
+```bash
+npx shadcn@latest add popover
+npx shadcn@latest add https://frimousse.liveblocks.io/r/emoji-picker
 ```
 
 ## Rate Limiting

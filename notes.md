@@ -1,5 +1,7 @@
 audit
 
+alerts!?
+
 app.tsx is huge. gotta break it apart a bit.
 
 zustand, jotai?

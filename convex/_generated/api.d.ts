@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as alerts from "../alerts.js";
 import type * as appState from "../appState.js";
 import type * as auth from "../auth.js";
 import type * as crowdfundingBackers from "../crowdfundingBackers.js";
@@ -23,6 +24,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  alerts: typeof alerts;
   appState: typeof appState;
   auth: typeof auth;
   crowdfundingBackers: typeof crowdfundingBackers;

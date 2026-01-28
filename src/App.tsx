@@ -86,6 +86,10 @@ function App() {
     api.users.getCurrentAppUser,
     isAuthenticated && sessionId ? {} : "skip"
   )
+  const hasUnreadAlerts = useQuery(
+    api.alerts.hasUnread,
+    isAuthenticated && sessionId ? {} : "skip"
+  )
 
   // Create app user and session if authenticated but no session exists
   useEffect(() => {
@@ -286,9 +290,6 @@ function App() {
         <div className="flex-1 h-full flex items-center justify-center gap-6 bg-teal-500 text-white">
           <button onClick={() => setCurrentPage('pricing')} className="hover:underline">Pricing</button>
           <button onClick={() => setCurrentPage('faq')} className="hover:underline">FAQ</button>
-          <button className="hover:underline">New Project</button>
-          <span className="text-white/70">Project Name</span>
-          <button className="hover:underline">Save</button>
         </div>
 
         {/* Auth buttons - fixed width to prevent layout shift */}
@@ -296,9 +297,12 @@ function App() {
           {shouldShowUser ? (
             <button
               onClick={() => setCurrentPage('user')}
-              className="w-full h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
+              className="relative w-full h-full flex items-center justify-center bg-orange-400 text-white font-medium hover:bg-orange-500 transition-colors"
             >
               User
+              {hasUnreadAlerts && (
+                <span className="absolute top-2 right-2 w-3 h-3 bg-red-500 rounded-full border-2 border-orange-400" />
+              )}
             </button>
           ) : shouldShowSignedOut ? (
             <div className="flex w-full h-full">
@@ -392,10 +396,23 @@ function App() {
             </div>
           </aside>
 
-          {/* Scene - never scrolls */}
-          <main className="flex-1 flex items-center justify-center bg-slate-50 overflow-hidden">
-            <div className="text-2xl text-slate-400 font-light">
-              SCENE
+          {/* Scene area */}
+          <main className="flex-1 flex flex-col overflow-hidden">
+            {/* Project toolbar */}
+            <div className="h-10 flex items-center gap-4 px-4 border-b bg-white shrink-0">
+              <button className="text-sm text-slate-600 hover:text-slate-900 hover:underline">
+                New Project
+              </button>
+              <span className="text-sm text-slate-400">Project Name</span>
+              <button className="text-sm text-slate-600 hover:text-slate-900 hover:underline">
+                Save
+              </button>
+            </div>
+            {/* Scene - never scrolls */}
+            <div className="flex-1 flex items-center justify-center bg-slate-50 overflow-hidden">
+              <div className="text-2xl text-slate-400 font-light">
+                SCENE
+              </div>
             </div>
           </main>
         </div>

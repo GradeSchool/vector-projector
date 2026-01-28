@@ -1,8 +1,14 @@
+import { useQuery } from 'convex/react'
+import { api } from '@convex/_generated/api'
+
 interface FaqPageProps {
   onBack: () => void
 }
 
 export function FaqPage({ onBack }: FaqPageProps) {
+  const appState = useQuery(api.appState.get)
+  const crowdfundingActive = appState?.crowdfundingActive ?? false
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto p-8 space-y-8">
@@ -23,23 +29,27 @@ export function FaqPage({ onBack }: FaqPageProps) {
           </p>
         </section>
 
-        <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-sky-600">Crowdfunding Early Access</h2>
-          <p className="text-gray-600">
-            Placeholder: We're currently on Makerworld crowdfunding. Here's how to get backer access...
-          </p>
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <p className="text-amber-800 font-medium">Are you a backer?</p>
-            <p className="text-amber-700 text-sm mt-1">
-              Placeholder: Instructions for backers to unlock access.
+        {crowdfundingActive && (
+          <section className="space-y-4">
+            <h2 className="text-xl font-semibold text-sky-600">Crowdfunding Early Access</h2>
+            <p className="text-gray-600">
+              Placeholder: We're currently on Makerworld crowdfunding. Here's how to get backer access...
             </p>
-          </div>
-        </section>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <p className="text-amber-800 font-medium">Are you a backer?</p>
+              <p className="text-amber-700 text-sm mt-1">
+                Placeholder: Instructions for backers to unlock access.
+              </p>
+            </div>
+          </section>
+        )}
 
         <section className="space-y-4">
           <h2 className="text-xl font-semibold text-sky-600">How do I sign up?</h2>
           <p className="text-gray-600">
-            Placeholder: Sign up with email or Google. During crowdfunding, you'll need backer verification to unlock full features.
+            {crowdfundingActive
+              ? 'Placeholder: Sign up with email or Google. During crowdfunding, you\'ll need backer verification to unlock full features.'
+              : 'Placeholder: Sign up with email or Google to save your work and access premium features.'}
           </p>
         </section>
 

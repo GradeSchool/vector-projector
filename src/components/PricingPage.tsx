@@ -1,8 +1,14 @@
+import { useQuery } from 'convex/react'
+import { api } from '@convex/_generated/api'
+
 interface PricingPageProps {
   onBack: () => void
 }
 
 export function PricingPage({ onBack }: PricingPageProps) {
+  const appState = useQuery(api.appState.get)
+  const crowdfundingActive = appState?.crowdfundingActive ?? false
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto p-8 space-y-8">
@@ -16,13 +22,15 @@ export function PricingPage({ onBack }: PricingPageProps) {
           </button>
         </div>
 
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <p className="text-amber-800 font-medium">Crowdfunding Active</p>
-          <p className="text-amber-700 text-sm mt-1">
-            During early access, only Makerworld backers can use premium features.
-            Public pricing takes effect after crowdfunding ends.
-          </p>
-        </div>
+        {crowdfundingActive && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p className="text-amber-800 font-medium">Crowdfunding Active</p>
+            <p className="text-amber-700 text-sm mt-1">
+              During early access, only Makerworld backers can use premium features.
+              Public pricing takes effect after crowdfunding ends.
+            </p>
+          </div>
+        )}
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Free Tier */}
@@ -53,7 +61,7 @@ export function PricingPage({ onBack }: PricingPageProps) {
               disabled
               className="w-full px-4 py-2 bg-gray-300 text-gray-500 rounded cursor-not-allowed"
             >
-              Available after crowdfunding
+              {crowdfundingActive ? 'Available after crowdfunding' : 'Coming soon'}
             </button>
           </div>
         </div>

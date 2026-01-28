@@ -290,6 +290,52 @@ Single-session enforcement: only one active session per user, one tab per browse
 - `src/hooks/useSession.ts` - Client-side session management hook
 - `src/App.tsx` - Session state integration, UI for kicked/duplicate states
 
+## Auth UI State Management
+
+Prevents flash of wrong auth buttons during sign-in, sign-out, and page refresh.
+
+### The Pattern
+
+Track ALL async operations, show loading UI until everything resolves:
+
+```typescript
+// Individual loading states
+const { isLoading, isAuthenticated } = useConvexAuth()
+const [isEnsuringUser, setIsEnsuringUser] = useState(false)
+const [isSigningOut, setIsSigningOut] = useState(false)
+const [authPending, setAuthPending] = useState(false)  // OAuth redirect
+
+// Computed
+const isSessionValidationPending = isAuthenticated && !!sessionId && isSessionValid === undefined
+const isAppUserLoading = isAuthenticated && !!sessionId && appUserQuery === undefined
+const isAuthResolving = isLoading || isEnsuringUser || isSigningOut || isSessionValidationPending || isAppUserLoading
+
+// UI decisions
+const shouldShowUser = !isAuthResolving && isAuthenticated && hasValidSession && !!effectiveAppUser
+const shouldShowSignedOut = !isAuthenticated && !sessionId && !authPending
+```
+
+### Three UI States
+
+1. **User button** - When `shouldShowUser` is true
+2. **Sign Up / Sign In** - When `shouldShowSignedOut` is true
+3. **Disabled User button** - Loading/transition (default)
+
+**Future:** When "User" becomes an avatar, the loading state will need a skeleton/placeholder (e.g., gray circle) instead of disabled text. The pattern stays the same, just swap the loading UI.
+
+### OAuth Pending (sessionStorage)
+
+- Set `vp_auth_pending` before Google redirect
+- Clear when fully resolved (authenticated + sessionId + appUserQuery)
+- 15-second timeout fallback
+
+### Key Files
+
+- `src/App.tsx` - State management, computed values
+- `src/components/modals/AuthModal.tsx` - Sets `authPending` before OAuth
+
+**See blueprint:** `core/02-frontend/auth-ui-state.md`
+
 ## App State (Singleton Pattern)
 
 Global app configuration stored in Convex. Single row enforced via `key="config"` pattern.

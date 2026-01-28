@@ -12,6 +12,8 @@ interface AuthSuccessResult {
   sessionId: string
 }
 
+const AUTH_PENDING_KEY = 'vp_auth_pending'
+
 interface AuthModalProps {
   isOpen: boolean
   onClose: () => void
@@ -340,8 +342,10 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
     setLoading(true)
 
     try {
+      sessionStorage.setItem(AUTH_PENDING_KEY, 'true')
       await authClient.signIn.social({ provider: 'google' })
     } catch (err) {
+      sessionStorage.removeItem(AUTH_PENDING_KEY)
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setLoading(false)
     }

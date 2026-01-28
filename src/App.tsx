@@ -17,6 +17,7 @@ const MIN_HEIGHT = 768
 type Page = 'main' | 'user' | 'faq' | 'pricing'
 
 const ONBOARDING_KEY = 'vp_onboarding_seen'
+const AUTH_PENDING_KEY = 'vp_auth_pending'
 
 function App() {
   const { isLoading, isAuthenticated } = useConvexAuth()
@@ -28,6 +29,7 @@ function App() {
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
   const [isEnsuringUser, setIsEnsuringUser] = useState(false)
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const [authPending, setAuthPending] = useState(false)
 
   // Show onboarding modal on first visit
   useEffect(() => {
@@ -35,6 +37,11 @@ function App() {
     if (!seen) {
       setIsOnboardingOpen(true)
     }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    setAuthPending(sessionStorage.getItem(AUTH_PENDING_KEY) === 'true')
   }, [])
 
 
@@ -120,6 +127,25 @@ function App() {
     })
   }, [appUserQuery, isAuthenticated, wasKicked])
 
+  useEffect(() => {
+    if (!authPending) return
+    if (isAuthenticated && sessionId && appUserQuery !== undefined) {
+      sessionStorage.removeItem(AUTH_PENDING_KEY)
+      setAuthPending(false)
+    }
+  }, [authPending, isAuthenticated, sessionId, appUserQuery])
+
+  useEffect(() => {
+    if (!authPending) return
+    const timeout = window.setTimeout(() => {
+      if (!isAuthenticated && !sessionId) {
+        sessionStorage.removeItem(AUTH_PENDING_KEY)
+        setAuthPending(false)
+      }
+    }, 15000)
+    return () => window.clearTimeout(timeout)
+  }, [authPending, isAuthenticated, sessionId])
+
 
   // Compute effective app user - null if kicked or not authenticated
   const effectiveAppUser = (wasKicked || !isAuthenticated) ? null : appUser
@@ -133,6 +159,8 @@ function App() {
     } catch (err) {
       console.error('Sign out failed:', err)
     } finally {
+      sessionStorage.removeItem(AUTH_PENDING_KEY)
+      setAuthPending(false)
       clearSession()
       setAppUser(null)
       setCurrentPage('main')
@@ -223,7 +251,7 @@ function App() {
   const isAppUserLoading = isAuthenticated && !!sessionId && appUserQuery === undefined
   const isAuthResolving = isLoading || isEnsuringUser || isSigningOut || isSessionValidationPending || isAppUserLoading
   const shouldShowUser = !isAuthResolving && isAuthenticated && hasValidSession && !!effectiveAppUser
-  const shouldShowSignedOut = !isAuthenticated && !sessionId
+  const shouldShowSignedOut = !isAuthenticated && !sessionId && !authPending
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">

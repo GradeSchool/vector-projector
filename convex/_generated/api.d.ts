@@ -10,6 +10,7 @@
 
 import type * as appState from "../appState.js";
 import type * as auth from "../auth.js";
+import type * as crowdfundingBackers from "../crowdfundingBackers.js";
 import type * as emails from "../emails.js";
 import type * as http from "../http.js";
 import type * as rateLimiter from "../rateLimiter.js";
@@ -24,6 +25,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   appState: typeof appState;
   auth: typeof auth;
+  crowdfundingBackers: typeof crowdfundingBackers;
   emails: typeof emails;
   http: typeof http;
   rateLimiter: typeof rateLimiter;

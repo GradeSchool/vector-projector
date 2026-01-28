@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useConvexAuth, useMutation, useQuery } from 'convex/react'
 import { api } from '@convex/_generated/api'
+import type { Id } from '@convex/_generated/dataModel'
 import { useSession } from './hooks/useSession'
 import { UserPage } from './components/UserPage'
 import { AdminPage } from './components/AdminPage'
@@ -18,6 +19,7 @@ type Page = 'main' | 'user' | 'faq' | 'pricing'
 
 const ONBOARDING_KEY = 'vp_onboarding_seen'
 const AUTH_PENDING_KEY = 'vp_auth_pending'
+const BACKER_ID_KEY = 'vp_backer_id'
 
 function App() {
   const { isLoading, isAuthenticated } = useConvexAuth()
@@ -85,7 +87,14 @@ function App() {
       let isActive = true
       // No session - need to create one (e.g., after Google OAuth redirect)
       setIsEnsuringUser(true)
-      ensureAppUser()
+
+      // Check for backer ID from crowdfunding sign up flow (stored before OAuth redirect)
+      const storedBackerId = sessionStorage.getItem(BACKER_ID_KEY)
+      const crowdfundingBackerId = storedBackerId
+        ? (storedBackerId as Id<"crowdfunding_backers">)
+        : undefined
+
+      ensureAppUser({ crowdfundingBackerId })
         .then((result) => {
           if (!isActive) return
           setSessionId(result.sessionId)
@@ -95,6 +104,8 @@ function App() {
             name: result.name,
             isAdmin: result.isAdmin,
           })
+          // Clear backer ID after successful account creation
+          sessionStorage.removeItem(BACKER_ID_KEY)
         })
         .catch((err) => {
           console.error('Failed to establish session:', err)

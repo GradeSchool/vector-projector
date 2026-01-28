@@ -9,10 +9,15 @@ import { rateLimiter } from "./rateLimiter";
  * Called after every sign-in (email/password or Google OAuth).
  * Creates the app user if it doesn't exist, starts a new session.
  * Returns user info, admin status, and sessionId.
+ *
+ * During crowdfunding, new users must provide a valid crowdfundingBackerId.
+ * Existing users signing in again don't need to re-verify.
  */
 export const ensureAppUser = mutation({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    crowdfundingBackerId: v.optional(v.id("crowdfunding_backers")),
+  },
+  handler: async (ctx, args) => {
     // Get the authenticated Better Auth user
     const authUser = await authComponent.getAuthUser(ctx);
     if (!authUser) {
@@ -48,6 +53,17 @@ export const ensureAppUser = mutation({
       appUser = { ...existingUser, activeSessionId: sessionId, sessionStartedAt: now };
     } else {
       // Create new app user with session
+      // If crowdfundingBackerId provided, validate and mark as used
+      if (args.crowdfundingBackerId) {
+        const backer = await ctx.db.get(args.crowdfundingBackerId);
+        if (!backer) {
+          throw new Error("Invalid backer ID");
+        }
+        if (backer.usedByUserId) {
+          throw new Error("This backer code has already been used");
+        }
+      }
+
       const userId = await ctx.db.insert("users", {
         authUserId: authUser._id,
         email: authUser.email,
@@ -55,7 +71,17 @@ export const ensureAppUser = mutation({
         createdAt: now,
         activeSessionId: sessionId,
         sessionStartedAt: now,
+        crowdfundingBackerId: args.crowdfundingBackerId,
       });
+
+      // Mark backer as used
+      if (args.crowdfundingBackerId) {
+        await ctx.db.patch(args.crowdfundingBackerId, {
+          usedByUserId: userId,
+          usedAt: now,
+        });
+      }
+
       appUser = await ctx.db.get(userId);
     }
 

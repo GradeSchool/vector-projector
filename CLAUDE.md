@@ -386,6 +386,66 @@ Don't manually add rows in dashboard - use the mutation.
 - `convex/schema.ts` - Table definition
 - `convex/appState.ts` - `get` query, `set` mutation
 
+## Crowdfunding Sign Up (Backer-Only Mode)
+
+During crowdfunding, only verified Makerworld backers can create accounts.
+
+### Database
+
+**Table: `crowdfunding_backers`**
+| Field | Type | Purpose |
+|-------|------|---------|
+| `username` | string | MakerWorld username |
+| `accessCode` | string | Verification code |
+| `tier` | string | Backer tier (affects future billing) |
+| `usedByUserId` | optional ID | Links to user who claimed it |
+| `usedAt` | optional number | Timestamp when claimed |
+
+**Added to `users` table:**
+| Field | Type | Purpose |
+|-------|------|---------|
+| `crowdfundingBackerId` | optional ID | Links to backer record |
+
+### Flow
+
+1. User clicks "Sign Up" → sees backer verification form
+2. User enters MakerWorld username + access code
+3. System validates against `crowdfunding_backers` table
+4. **If invalid**: Show error
+5. **If already used**: Show "code already used" error
+6. **If valid**: Show standard sign up form (Google or email/password)
+7. On account creation, `crowdfundingBackerId` is stored on user record
+8. Backer record is marked as used (`usedByUserId`, `usedAt`)
+
+### Google OAuth Flow
+
+For Google sign up, backerId is stored in sessionStorage before redirect:
+1. User verifies backer → backerId stored in state
+2. User clicks "Continue with Google" → backerId saved to `vp_backer_id` in sessionStorage
+3. OAuth redirect happens
+4. On return, App.tsx retrieves backerId from sessionStorage
+5. `ensureAppUser` is called with backerId, linking the accounts
+
+### Key Files
+
+- `convex/schema.ts` - `crowdfunding_backers` table, `crowdfundingBackerId` on users
+- `convex/crowdfundingBackers.ts` - `verifyBacker` mutation
+- `convex/users.ts` - `ensureAppUser` accepts optional `crowdfundingBackerId`
+- `src/components/modals/AuthModal.tsx` - Two-step backer verification flow
+- `src/App.tsx` - Retrieves backerId from sessionStorage after OAuth
+
+### Populating Backers
+
+Backers must be added to the `crowdfunding_backers` table before they can sign up:
+```bash
+npx convex run crowdfundingBackers:addBacker '{"username": "user123", "accessCode": "ABC123", "tier": "Gold"}'
+```
+
+### Open Questions
+
+1. **Access code generation** - How are codes created and distributed to backers?
+2. **Bulk import** - Need a way to import backer list from MakerWorld/spreadsheet
+
 ## Onboarding Modal
 
 First-visit welcome modal. Uses localStorage (user has no account yet).

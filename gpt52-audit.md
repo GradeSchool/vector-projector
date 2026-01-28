@@ -2,35 +2,42 @@
 
 Date: 2026-01-27
 
-Scope: quick pass on client + Convex backend + auth/email flow + config.
+Scope: quick pass on client + Convex backend + auth/email flow + crowdfunding + config.
 
 ### High risk / security
-- Email template variable substitution is raw string replacement with no HTML escaping, so injected values could become HTML/JS in emails (`convex/emails.ts`).
-- Public auth routes have no rate limiting; OTP and password reset can be spammed or brute-forced (`convex/http.ts`, `convex/auth.ts`, `convex/users.ts`).
-- CORS is wide open (`cors: true`), so any origin can hit auth endpoints (`convex/http.ts`).
-- Env vars are assumed with non-null assertions; missing values will crash or misconfigure auth at runtime (`convex/auth.ts`).
+- Email template variables are inserted with raw string replacement, so injected values can become HTML/JS in emails (`convex/emails.ts`).
+- Auth HTTP routes are still wide open and lack rate limiting (OTP send/verify, signup/signin); the limiter exists but isn’t applied here (`convex/http.ts`, `convex/auth.ts`, `convex/rateLimiter.ts`).
+- CORS is unrestricted (`cors: true`), so any origin can call auth endpoints (`convex/http.ts`).
+- Env vars are used with non-null assertions; missing values can crash or misconfigure auth at runtime (`convex/auth.ts`).
+- `crowdfundingBackers.addBacker` is a public mutation with no auth guard; anyone could insert backers if called from the client (`convex/crowdfundingBackers.ts`).
 
 ### Medium risk / data integrity
-- `users` and `admins` tables rely on indexes but do not enforce uniqueness; duplicate email rows are possible (`convex/schema.ts`).
-- `ensureAppUser` uses `db.get()` and then non-null asserts; a null result would crash the mutation (`convex/users.ts`).
-- Session enforcement is "last write wins"; concurrent sign-ins can race and flip `activeSessionId` unexpectedly (`convex/users.ts`).
+- `users`, `admins`, and `crowdfunding_backers` rely on indexes but do not enforce uniqueness; duplicates are possible (`convex/schema.ts`).
+- Session enforcement is still “last write wins”; concurrent sign-ins can race and flip `activeSessionId` unexpectedly (`convex/users.ts`).
+- `ensureAppUser` non-null asserts `appUser` after `db.get()`; a null result would crash (`convex/users.ts`).
+- `app_state` is a singleton by convention only; multiple rows with key `"config"` are possible (`convex/appState.ts`, `convex/schema.ts`).
 
 ### Medium risk / auth + session behavior
-- Client calls `ensureAppUser()` in a `useEffect` without error handling; failures are silent and can leave the UI in an inconsistent state (`src/App.tsx`).
-- Session validation uses localStorage + BroadcastChannel without guardrails; storage access can throw (privacy modes), and duplicate tab detection is timing-based (`src/hooks/useSession.ts`).
-- Session ID validation accepts any string without format checks, so malformed data is allowed (`convex/users.ts`).
+- Client now logs `ensureAppUser` failures but provides no user‑visible error; this can leave the app in a partial auth state (`src/App.tsx`).
+- Session validation accepts any string for `sessionId` with no UUID format check (`convex/users.ts`).
+- localStorage/sessionStorage access is unguarded in multiple places; it can throw in privacy modes or restricted contexts (`src/App.tsx`, `src/hooks/useSession.ts`, `src/components/modals/AuthModal.tsx`).
+- BroadcastChannel setup has no try/catch; failures can break duplicate‑tab logic (`src/hooks/useSession.ts`).
+
+### Medium risk / crowdfunding flow
+- Crowdfunding access is enforced only in the client; the server does not require a backer ID when `crowdfundingActive` is true (`src/components/modals/AuthModal.tsx`, `convex/users.ts`, `convex/appState.ts`).
+- `verifyBacker` is a public mutation without rate limiting, so backer credentials can be brute‑forced (`convex/crowdfundingBackers.ts`).
+- Backer ID stored in `sessionStorage` is cleared on success/failure, but can linger if a user abandons OAuth mid‑flow (timeout exists but not guaranteed) (`src/App.tsx`, `src/components/modals/AuthModal.tsx`).
 
 ### Low risk / UX + maintainability
-- Auth error handling relies on string matching; future server error message changes may break UI error mapping (`src/components/modals/AuthModal.tsx`).
-- Missing error boundary; a single React runtime error can take down the SPA (`src/App.tsx`).
-- App-state singleton is implied by comments but not enforced; multiple rows are possible (`convex/schema.ts`).
+- Auth error mapping still relies on string matching; server message changes can break UI feedback (`src/components/modals/AuthModal.tsx`).
+- Missing error boundary; a single React error still takes down the SPA (`src/App.tsx`).
 
 ### Suggested next steps (scaffold-friendly)
-- Add HTML escaping for email template variables; only allow a fixed set of placeholders.
-- Add basic rate limiting + captcha/bot protection for auth and OTP routes.
-- Restrict CORS to your known site origins.
+- Escape email template variables; allow only whitelisted placeholders.
+- Apply rate limiting to auth HTTP routes and public mutations (OTP, verifyBacker, addBacker).
+- Restrict CORS to known origins.
 - Validate critical env vars at startup and fail fast with clear errors.
-- Add uniqueness safeguards in schema (or enforce in mutations) for `users.email` and `admins.email`.
-- Harden session logic: serialize `ensureAppUser` calls or use optimistic locking.
-- Wrap localStorage access with try/catch and default safe values.
+- Add uniqueness guarantees (or enforcement in mutations) for `users.email`, `admins.email`, `crowdfunding_backers.username+accessCode`, and `app_state.key`.
+- Enforce crowdfunding rules server‑side when `crowdfundingActive` is true.
+- Wrap localStorage/sessionStorage/BroadcastChannel calls with try/catch.
 - Add a minimal React error boundary around the app shell.

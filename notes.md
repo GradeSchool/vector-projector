@@ -2,10 +2,8 @@ audit
 
 app.tsx is huge. gotta break it apart a bit.
 
-rate limiting (botid comes next)
-
 zustand, jotai?
 
-STL export as well as 3mf. 
+STL export as well as 3mf. STEO would be SO nice, but...
 
 convex mcp

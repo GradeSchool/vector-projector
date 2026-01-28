@@ -13,9 +13,23 @@ export default defineSchema({
     // Session enforcement - only one active session per user
     activeSessionId: v.optional(v.string()),
     sessionStartedAt: v.optional(v.number()),
+    // Crowdfunding backer link (for tier-based billing discounts)
+    crowdfundingBackerId: v.optional(v.id("crowdfunding_backers")),
   })
     .index("by_authUserId", ["authUserId"])
     .index("by_email", ["email"]),
+
+  // Crowdfunding backers - verified MakerWorld supporters
+  // Populated manually or via import before crowdfunding period
+  crowdfunding_backers: defineTable({
+    username: v.string(), // MakerWorld username
+    accessCode: v.string(), // Verification code
+    tier: v.string(), // Backer tier (affects future billing discounts)
+    usedByUserId: v.optional(v.id("users")), // Tracks which user claimed this
+    usedAt: v.optional(v.number()), // When it was claimed
+  })
+    .index("by_username_code", ["username", "accessCode"])
+    .index("by_usedByUserId", ["usedByUserId"]),
 
   // Admin whitelist - manually managed
   // Users with emails in this table have admin privileges

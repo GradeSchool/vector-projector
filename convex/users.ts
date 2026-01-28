@@ -82,7 +82,11 @@ export const ensureAppUser = mutation({
         });
       }
 
-      appUser = await ctx.db.get(userId);
+      const newUser = await ctx.db.get(userId);
+      if (!newUser) {
+        throw new Error("Failed to create user record");
+      }
+      appUser = newUser;
     }
 
     // Check if user is an admin
@@ -94,9 +98,9 @@ export const ensureAppUser = mutation({
     const isAdmin = adminRecord !== null;
 
     return {
-      userId: appUser!._id,
-      email: appUser!.email,
-      name: appUser!.name,
+      userId: appUser._id,
+      email: appUser.email,
+      name: appUser.name,
       isAdmin,
       sessionId,
     };

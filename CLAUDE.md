@@ -533,15 +533,91 @@ Better Auth HTTP routes (sign up, sign in, OTP) need Vercel edge middleware or H
 - `convex/rateLimiter.ts` - Rules configuration
 - `convex/users.ts` - Applied to `ensureAppUser`
 
-## Critical Notes (Pre-Production)
+## Security Hardening
 
-**See blueprint: `core/00-overview/critical-notes.md`**
+### Environment Variable Validation
+
+All required env vars are validated at module load time. Missing vars fail fast with clear errors:
+
+```typescript
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `Missing required environment variable: ${name}. ` +
+      `Set it in Convex Dashboard > Settings > Environment Variables.`
+    );
+  }
+  return value;
+}
+
+const siteUrl = requireEnv("SITE_URL");
+const googleClientId = requireEnv("GOOGLE_CLIENT_ID");
+```
+
+**Key File:** `convex/auth.ts`
+
+### Email Template Variable Escaping
+
+All email template variables are HTML-escaped to prevent XSS-in-email attacks:
+
+```typescript
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// In sendTemplateEmail:
+const safeValue = escapeHtml(value);
+html = html.replaceAll(`{{${key}}}`, safeValue);
+```
+
+**Key File:** `convex/emails.ts`
+
+### CORS Restriction
+
+HTTP routes only accept requests from known origins:
+
+```typescript
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://vectorprojector.weheart.art",
+];
+authComponent.registerRoutes(http, createAuth, {
+  cors: { allowedOrigins },
+});
+```
+
+**Key File:** `convex/http.ts`
+
+### Safe Storage Utilities
+
+localStorage/sessionStorage can throw in private browsing mode. Safe wrappers prevent crashes:
+
+```typescript
+export function safeLocalGet(key: string): string | null {
+  try { return localStorage.getItem(key) } catch { return null }
+}
+```
+
+**Key File:** `src/lib/storage.ts`
+
+### Internal Mutations
+
+Sensitive operations use `internalMutation` (not callable from client):
+- `crowdfundingBackers:addBacker` - Only callable from other Convex functions
+
+## Critical Notes (Pre-Production)
 
 Before production launch:
 
 1. **Custom Domain for OAuth** - Set up custom domain for Convex HTTP routes so Google consent screen shows your domain instead of `*.convex.site`
-2. **Bot Protection** - Vercel bot detection, CAPTCHA for signup
-3. **Rate Limiting** - Convex rate limiting for all public endpoints (partial - see above)
+2. **Bot Protection** - Vercel BotID (Pro tier) protects Better Auth HTTP routes at the edge
+3. **Rate Limiting** - Convex rate limiting for mutations (partial - see above). Better Auth routes protected by Vercel BotID.
 4. **Resend Domain** - Already verified (`weheart.art`)
 
 These are HIGH PRIORITY - without them, bots can spam signups and trigger email costs.

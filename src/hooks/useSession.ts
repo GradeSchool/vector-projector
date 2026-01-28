@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '@convex/_generated/api'
+import { safeLocalGet, safeLocalSet, safeLocalRemove } from '@/lib/storage'
 
 const SESSION_KEY = 'vp_session_id'
 const TAB_CHANNEL = 'vp_tab_coordination'
@@ -18,7 +19,7 @@ interface UseSessionResult {
 export function useSession(isAuthenticated: boolean): UseSessionResult {
   const [sessionId, setSessionIdState] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(SESSION_KEY)
+      return safeLocalGet(SESSION_KEY)
     }
     return null
   })
@@ -42,52 +43,67 @@ export function useSession(isAuthenticated: boolean): UseSessionResult {
   // Clear localStorage when kicked (side effect)
   useEffect(() => {
     if (wasKicked && sessionId) {
-      localStorage.removeItem(SESSION_KEY)
+      safeLocalRemove(SESSION_KEY)
     }
   }, [wasKicked, sessionId])
 
   // BroadcastChannel for duplicate tab detection
   // Only matters when we have a session (authenticated with sessionId)
+  // Wrapped in try/catch - BroadcastChannel may not be available in all contexts
   useEffect(() => {
     if (typeof window === 'undefined' || !sessionId) return
 
-    const channel = new BroadcastChannel(TAB_CHANNEL)
-    channelRef.current = channel
+    let channel: BroadcastChannel | null = null
+    let checkTimeout: ReturnType<typeof setTimeout> | null = null
 
-    // Listen for other tabs
-    channel.onmessage = (e) => {
-      if (e.data.type === 'TAB_CHECK' && e.data.tabId !== tabId.current) {
-        // Another tab is checking - respond to let it know we exist
-        channel.postMessage({ type: 'TAB_EXISTS', tabId: tabId.current })
+    try {
+      channel = new BroadcastChannel(TAB_CHANNEL)
+      channelRef.current = channel
+
+      // Listen for other tabs
+      channel.onmessage = (e) => {
+        if (e.data.type === 'TAB_CHECK' && e.data.tabId !== tabId.current) {
+          // Another tab is checking - respond to let it know we exist
+          channel?.postMessage({ type: 'TAB_EXISTS', tabId: tabId.current })
+        }
+        if (e.data.type === 'TAB_EXISTS' && e.data.tabId !== tabId.current) {
+          // Got response - another tab exists, we are the duplicate
+          setIsDuplicateTab(true)
+        }
       }
-      if (e.data.type === 'TAB_EXISTS' && e.data.tabId !== tabId.current) {
-        // Got response - another tab exists, we are the duplicate
-        setIsDuplicateTab(true)
-      }
+
+      // Small delay to ensure other tabs have their listeners set up
+      checkTimeout = setTimeout(() => {
+        channel?.postMessage({ type: 'TAB_CHECK', tabId: tabId.current })
+      }, 100)
+    } catch {
+      // BroadcastChannel not available - duplicate tab detection disabled
+      // This is fine, the feature just won't work
     }
 
-    // Small delay to ensure other tabs have their listeners set up
-    const checkTimeout = setTimeout(() => {
-      channel.postMessage({ type: 'TAB_CHECK', tabId: tabId.current })
-    }, 100)
-
     return () => {
-      clearTimeout(checkTimeout)
-      channel.close()
+      if (checkTimeout) clearTimeout(checkTimeout)
+      if (channel) {
+        try {
+          channel.close()
+        } catch {
+          // Ignore close errors
+        }
+      }
       channelRef.current = null
     }
   }, [sessionId])
 
   // Set session ID (called after sign-in)
   const setSessionId = (id: string) => {
-    localStorage.setItem(SESSION_KEY, id)
+    safeLocalSet(SESSION_KEY, id)
     setSessionIdState(id)
     setKickedFlag(false)
   }
 
   // Clear session (called on sign-out)
   const clearSession = () => {
-    localStorage.removeItem(SESSION_KEY)
+    safeLocalRemove(SESSION_KEY)
     setSessionIdState(null)
     setKickedFlag(false)
   }

@@ -8,7 +8,26 @@ import { betterAuth } from "better-auth";
 import { emailOTP } from "better-auth/plugins";
 import authConfig from "./auth.config";
 
-const siteUrl = process.env.SITE_URL!;
+// =============================================================================
+// ENV VAR VALIDATION
+// Fail fast with clear errors if required env vars are missing.
+// Set these in Convex Dashboard > Settings > Environment Variables
+// =============================================================================
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `Missing required environment variable: ${name}. ` +
+      `Set it in Convex Dashboard > Settings > Environment Variables.`
+    );
+  }
+  return value;
+}
+
+const siteUrl = requireEnv("SITE_URL");
+const googleClientId = requireEnv("GOOGLE_CLIENT_ID");
+const googleClientSecret = requireEnv("GOOGLE_CLIENT_SECRET");
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
@@ -22,8 +41,8 @@ export const createAuth = (ctx: GenericCtx<DataModel>) => {
     },
     socialProviders: {
       google: {
-        clientId: process.env.GOOGLE_CLIENT_ID!,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
       },
     },
     plugins: [

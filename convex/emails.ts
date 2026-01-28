@@ -60,6 +60,20 @@ const TEMPLATES = {
 type TemplateKey = keyof typeof TEMPLATES;
 
 // =============================================================================
+// SECURITY: HTML ESCAPING
+// All template variables are HTML-escaped to prevent XSS-in-email attacks.
+// =============================================================================
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// =============================================================================
 // ACTIONS
 // =============================================================================
 
@@ -100,12 +114,13 @@ export const sendTemplateEmail = internalAction({
       throw new Error(`Unknown email template: ${template}`);
     }
 
-    // Substitute variables
+    // Substitute variables with HTML escaping to prevent XSS
     let html = tmpl.html;
     let subject: string = tmpl.subject;
     for (const [key, value] of Object.entries(variables)) {
-      html = html.replaceAll(`{{${key}}}`, value);
-      subject = subject.replaceAll(`{{${key}}}`, value);
+      const safeValue = escapeHtml(value);
+      html = html.replaceAll(`{{${key}}}`, safeValue);
+      subject = subject.replaceAll(`{{${key}}}`, safeValue);
     }
 
     const { data, error } = await resend.emails.send({

@@ -11,6 +11,12 @@ import { TestModal } from './components/modals/TestModal'
 import { AuthModal } from './components/modals/AuthModal'
 import { OnboardingModal } from './components/modals/OnboardingModal'
 import { authClient } from '@/lib/auth-client'
+import {
+  safeLocalGet,
+  safeLocalSet,
+  safeSessionGet,
+  safeSessionRemove,
+} from '@/lib/storage'
 
 const MIN_WIDTH = 1024
 const MIN_HEIGHT = 768
@@ -35,7 +41,7 @@ function App() {
 
   // Show onboarding modal on first visit
   useEffect(() => {
-    const seen = localStorage.getItem(ONBOARDING_KEY)
+    const seen = safeLocalGet(ONBOARDING_KEY)
     if (!seen) {
       setIsOnboardingOpen(true)
     }
@@ -43,12 +49,12 @@ function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    setAuthPending(sessionStorage.getItem(AUTH_PENDING_KEY) === 'true')
+    setAuthPending(safeSessionGet(AUTH_PENDING_KEY) === 'true')
   }, [])
 
 
   const handleOnboardingClose = () => {
-    localStorage.setItem(ONBOARDING_KEY, 'true')
+    safeLocalSet(ONBOARDING_KEY, 'true')
     setIsOnboardingOpen(false)
   }
 
@@ -89,7 +95,7 @@ function App() {
       setIsEnsuringUser(true)
 
       // Check for backer ID from crowdfunding sign up flow (stored before OAuth redirect)
-      const storedBackerId = sessionStorage.getItem(BACKER_ID_KEY)
+      const storedBackerId = safeSessionGet(BACKER_ID_KEY)
       const crowdfundingBackerId = storedBackerId
         ? (storedBackerId as Id<"crowdfunding_backers">)
         : undefined
@@ -105,7 +111,7 @@ function App() {
             isAdmin: result.isAdmin,
           })
           // Clear backer ID after successful account creation
-          sessionStorage.removeItem(BACKER_ID_KEY)
+          safeSessionRemove(BACKER_ID_KEY)
         })
         .catch((err) => {
           console.error('Failed to establish session:', err)
@@ -141,7 +147,7 @@ function App() {
   useEffect(() => {
     if (!authPending) return
     if (isAuthenticated && sessionId && appUserQuery !== undefined) {
-      sessionStorage.removeItem(AUTH_PENDING_KEY)
+      safeSessionRemove(AUTH_PENDING_KEY)
       setAuthPending(false)
     }
   }, [authPending, isAuthenticated, sessionId, appUserQuery])
@@ -150,7 +156,7 @@ function App() {
     if (!authPending) return
     const timeout = window.setTimeout(() => {
       if (!isAuthenticated && !sessionId) {
-        sessionStorage.removeItem(AUTH_PENDING_KEY)
+        safeSessionRemove(AUTH_PENDING_KEY)
         setAuthPending(false)
       }
     }, 15000)
@@ -170,7 +176,7 @@ function App() {
     } catch (err) {
       console.error('Sign out failed:', err)
     } finally {
-      sessionStorage.removeItem(AUTH_PENDING_KEY)
+      safeSessionRemove(AUTH_PENDING_KEY)
       setAuthPending(false)
       clearSession()
       setAppUser(null)

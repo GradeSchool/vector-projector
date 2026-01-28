@@ -4,6 +4,7 @@ import { api } from '@convex/_generated/api'
 import type { Id } from '@convex/_generated/dataModel'
 import { Modal } from '@/components/Modal'
 import { authClient } from '@/lib/auth-client'
+import { safeSessionSet, safeSessionRemove } from '@/lib/storage'
 
 interface AuthSuccessResult {
   userId: string
@@ -261,7 +262,7 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
       })
 
       // Clear backer ID from sessionStorage if it was stored
-      sessionStorage.removeItem(BACKER_ID_KEY)
+      safeSessionRemove(BACKER_ID_KEY)
 
       if (onAuthSuccess) {
         onAuthSuccess(appUserResult)
@@ -365,15 +366,15 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
     setLoading(true)
 
     try {
-      sessionStorage.setItem(AUTH_PENDING_KEY, 'true')
+      safeSessionSet(AUTH_PENDING_KEY, 'true')
       // Store backer ID if this is a backer sign up (for retrieval after OAuth redirect)
       if (verifiedBackerId) {
-        sessionStorage.setItem(BACKER_ID_KEY, verifiedBackerId)
+        safeSessionSet(BACKER_ID_KEY, verifiedBackerId)
       }
       await authClient.signIn.social({ provider: 'google' })
     } catch (err) {
-      sessionStorage.removeItem(AUTH_PENDING_KEY)
-      sessionStorage.removeItem(BACKER_ID_KEY)
+      safeSessionRemove(AUTH_PENDING_KEY)
+      safeSessionRemove(BACKER_ID_KEY)
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setLoading(false)
     }

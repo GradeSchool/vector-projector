@@ -32,12 +32,16 @@ export default defineSchema({
   // Populated manually or via import before crowdfunding period
   crowdfunding_backers: defineTable({
     username: v.string(), // MakerWorld username
+    usernameLower: v.optional(v.string()), // normalized for lookup
     accessCode: v.string(), // Verification code
     tier: v.string(), // Backer tier (affects future billing discounts)
     usedByUserId: v.optional(v.id("users")), // Tracks which user claimed this
     usedAt: v.optional(v.number()), // When it was claimed
+    pendingClaimToken: v.optional(v.string()), // short-lived verification token
+    pendingClaimExpiresAt: v.optional(v.number()),
   })
     .index("by_username_code", ["username", "accessCode"])
+    .index("by_usernameLower_code", ["usernameLower", "accessCode"])
     .index("by_usedByUserId", ["usedByUserId"]),
 
   // Admin whitelist - manually managed

@@ -19,11 +19,10 @@ export const getActive = query({
     const cutoff = Date.now() - ALERT_EXPIRY_MS;
     const alerts = await ctx.db
       .query("alerts")
-      .withIndex("by_createdAt")
+      .withIndex("by_createdAt", (q) => q.gt("createdAt", cutoff))
       .order("desc")
       .collect();
-    // Filter to only non-expired alerts
-    return alerts.filter((alert) => alert.createdAt > cutoff);
+    return alerts;
   },
 });
 
@@ -54,15 +53,15 @@ export const hasUnread = query({
     // Check for any active alert newer than user's lastSeenAlertAt
     const cutoff = Date.now() - ALERT_EXPIRY_MS;
     const lastSeen = appUser.lastSeenAlertAt ?? 0;
+    const since = Math.max(cutoff, lastSeen);
 
-    const alerts = await ctx.db
+    const latestUnread = await ctx.db
       .query("alerts")
-      .withIndex("by_createdAt")
+      .withIndex("by_createdAt", (q) => q.gt("createdAt", since))
       .order("desc")
-      .collect();
+      .first();
 
-    // Has unread if any non-expired alert is newer than lastSeen
-    return alerts.some((alert) => alert.createdAt > cutoff && alert.createdAt > lastSeen);
+    return !!latestUnread;
   },
 });
 

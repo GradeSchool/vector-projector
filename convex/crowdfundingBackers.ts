@@ -2,6 +2,11 @@ import { v } from "convex/values";
 import { internalMutation, mutation } from "./_generated/server";
 import { rateLimiter } from "./rateLimiter";
 
+const CLAIM_TOKEN_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+const normalizeUsername = (username: string) => username.trim();
+const normalizeUsernameLower = (username: string) => normalizeUsername(username).toLowerCase();
+
 /**
  * Add a backer to the crowdfunding_backers table.
  * INTERNAL ONLY - cannot be called from client.
@@ -16,11 +21,15 @@ export const addBacker = internalMutation({
     tier: v.string(),
   },
   handler: async (ctx, args) => {
+    const normalizedUsername = normalizeUsername(args.username);
+    const usernameLower = normalizeUsernameLower(args.username);
+    const accessCode = args.accessCode.trim();
+
     // Check if this username/code combo already exists
     const existing = await ctx.db
       .query("crowdfunding_backers")
-      .withIndex("by_username_code", (q) =>
-        q.eq("username", args.username).eq("accessCode", args.accessCode)
+      .withIndex("by_usernameLower_code", (q) =>
+        q.eq("usernameLower", usernameLower).eq("accessCode", accessCode)
       )
       .unique();
 
@@ -29,8 +38,9 @@ export const addBacker = internalMutation({
     }
 
     const id = await ctx.db.insert("crowdfunding_backers", {
-      username: args.username,
-      accessCode: args.accessCode,
+      username: normalizedUsername,
+      usernameLower,
+      accessCode,
       tier: args.tier,
     });
 
@@ -53,9 +63,13 @@ export const verifyBacker = mutation({
     accessCode: v.string(),
   },
   handler: async (ctx, args) => {
+    const normalizedUsername = normalizeUsername(args.username);
+    const usernameLower = normalizeUsernameLower(args.username);
+    const accessCode = args.accessCode.trim();
+
     // Rate limit by username to prevent brute-forcing codes for a specific user
     const { ok, retryAfter } = await rateLimiter.limit(ctx, "backerVerify", {
-      key: args.username.toLowerCase(),
+      key: usernameLower,
     });
     if (!ok) {
       return {
@@ -65,12 +79,30 @@ export const verifyBacker = mutation({
       };
     }
 
-    const backer = await ctx.db
+    let backer = await ctx.db
       .query("crowdfunding_backers")
-      .withIndex("by_username_code", (q) =>
-        q.eq("username", args.username).eq("accessCode", args.accessCode)
+      .withIndex("by_usernameLower_code", (q) =>
+        q.eq("usernameLower", usernameLower).eq("accessCode", accessCode)
       )
       .unique();
+
+    if (!backer) {
+      backer = await ctx.db
+        .query("crowdfunding_backers")
+        .withIndex("by_username_code", (q) =>
+          q.eq("username", normalizedUsername).eq("accessCode", accessCode)
+        )
+        .unique();
+    }
+
+    if (!backer) {
+      const legacyMatches = await ctx.db.query("crowdfunding_backers").collect();
+      backer = legacyMatches.find(
+        (record) =>
+          record.accessCode === accessCode &&
+          (record.usernameLower ?? record.username.toLowerCase()) === usernameLower
+      ) ?? null;
+    }
 
     if (!backer) {
       return { valid: false as const, reason: "invalid_credentials" as const };
@@ -80,10 +112,27 @@ export const verifyBacker = mutation({
       return { valid: false as const, reason: "already_used" as const };
     }
 
+    if (backer.usernameLower !== usernameLower || backer.username !== normalizedUsername) {
+      await ctx.db.patch(backer._id, {
+        username: normalizedUsername,
+        usernameLower,
+      });
+    }
+
+    const pendingClaimToken = crypto.randomUUID();
+    const pendingClaimExpiresAt = Date.now() + CLAIM_TOKEN_TTL_MS;
+
+    await ctx.db.patch(backer._id, {
+      pendingClaimToken,
+      pendingClaimExpiresAt,
+    });
+
     return {
       valid: true as const,
       backerId: backer._id,
       tier: backer.tier,
+      claimToken: pendingClaimToken,
+      claimExpiresAt: pendingClaimExpiresAt,
     };
   },
 });

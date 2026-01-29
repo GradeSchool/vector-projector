@@ -16,6 +16,7 @@ interface AuthSuccessResult {
 
 const AUTH_PENDING_KEY = 'vp_auth_pending'
 const BACKER_ID_KEY = 'vp_backer_id'
+const BACKER_TOKEN_KEY = 'vp_backer_token'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -68,6 +69,7 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
   const [accessCode, setAccessCode] = useState('')
   const [verifiedBackerId, setVerifiedBackerId] = useState<Id<"crowdfunding_backers"> | null>(null)
   const [verifiedBackerTier, setVerifiedBackerTier] = useState<string | null>(null)
+  const [verifiedBackerToken, setVerifiedBackerToken] = useState<string | null>(null)
 
   const appState = useQuery(api.appState.get)
   const crowdfundingActive = appState?.crowdfundingActive ?? false
@@ -90,6 +92,7 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
       setAccessCode('')
       setVerifiedBackerId(null)
       setVerifiedBackerTier(null)
+      setVerifiedBackerToken(null)
     }
   }, [isOpen, mode])
 
@@ -164,14 +167,15 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
           // Try to map server errors to fields (check specific errors first)
           const msg = result.error.message || 'Something went wrong'
           const msgLower = msg.toLowerCase()
+          const code = (result.error as { code?: string }).code
 
-          if (msgLower.includes('already exists') || msgLower.includes('already registered') || msgLower.includes('user already')) {
+          if (code === 'USER_ALREADY_EXISTS' || msgLower.includes('already exists') || msgLower.includes('already registered') || msgLower.includes('user already')) {
             setFieldErrors(prev => ({ ...prev, email: 'An account with this email already exists' }))
-          } else if (msg.includes('[body.name]') || (msgLower.includes('name') && !msgLower.includes('email'))) {
+          } else if (code === 'INVALID_NAME' || msg.includes('[body.name]') || (msgLower.includes('name') && !msgLower.includes('email'))) {
             setFieldErrors(prev => ({ ...prev, name: 'Name is required' }))
-          } else if (msg.includes('[body.email]')) {
+          } else if (code === 'INVALID_EMAIL' || msg.includes('[body.email]')) {
             setFieldErrors(prev => ({ ...prev, email: 'Please enter a valid email' }))
-          } else if (msg.includes('[body.password]') || msgLower.includes('password')) {
+          } else if (code === 'INVALID_PASSWORD' || msg.includes('[body.password]') || msgLower.includes('password')) {
             setFieldErrors(prev => ({ ...prev, password: 'Password does not meet requirements' }))
           } else {
             setError(msg)
@@ -199,12 +203,13 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
 
         if (signInResult.error) {
           const msg = signInResult.error.message || 'Something went wrong'
+          const code = (signInResult.error as { code?: string }).code
           // Common sign-in errors
-          if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('credentials')) {
+          if (code === 'INVALID_CREDENTIALS' || msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('credentials')) {
             setError('Invalid email or password')
-          } else if (msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no user')) {
+          } else if (code === 'USER_NOT_FOUND' || msg.toLowerCase().includes('not found') || msg.toLowerCase().includes('no user')) {
             setError('No account found with this email')
-          } else if (msg.toLowerCase().includes('not verified')) {
+          } else if (code === 'EMAIL_NOT_VERIFIED' || msg.toLowerCase().includes('not verified')) {
             setError('Please verify your email first')
           } else {
             setError(msg)
@@ -259,10 +264,12 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
       // Pass backerId if this was a backer sign up
       const appUserResult = await ensureAppUser({
         crowdfundingBackerId: verifiedBackerId ?? undefined,
+        crowdfundingBackerToken: verifiedBackerToken ?? undefined,
       })
 
       // Clear backer ID from sessionStorage if it was stored
       safeSessionRemove(BACKER_ID_KEY)
+      safeSessionRemove(BACKER_TOKEN_KEY)
 
       if (onAuthSuccess) {
         onAuthSuccess(appUserResult)
@@ -368,13 +375,15 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
     try {
       safeSessionSet(AUTH_PENDING_KEY, 'true')
       // Store backer ID if this is a backer sign up (for retrieval after OAuth redirect)
-      if (verifiedBackerId) {
+      if (verifiedBackerId && verifiedBackerToken) {
         safeSessionSet(BACKER_ID_KEY, verifiedBackerId)
+        safeSessionSet(BACKER_TOKEN_KEY, verifiedBackerToken)
       }
       await authClient.signIn.social({ provider: 'google' })
     } catch (err) {
       safeSessionRemove(AUTH_PENDING_KEY)
       safeSessionRemove(BACKER_ID_KEY)
+      safeSessionRemove(BACKER_TOKEN_KEY)
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setLoading(false)
     }
@@ -415,8 +424,13 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
       }
 
       // Backer verified - store ID and show standard sign up form
+      if (!('claimToken' in result) || !result.claimToken) {
+        setError('Verification expired. Please try again.')
+        return
+      }
       setVerifiedBackerId(result.backerId)
       setVerifiedBackerTier(result.tier)
+      setVerifiedBackerToken(result.claimToken)
       setStep('backer-verified')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed')
@@ -675,6 +689,7 @@ export function AuthModal({ isOpen, onClose, mode, onAuthSuccess }: AuthModalPro
               setStep('form')
               setVerifiedBackerId(null)
               setVerifiedBackerTier(null)
+              setVerifiedBackerToken(null)
             }}
             className="w-full text-xs text-gray-500 hover:text-gray-700"
           >

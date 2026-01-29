@@ -4,9 +4,21 @@ import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(
+      `Missing required environment variable: ${name}. ` +
+      `Set it in Convex Dashboard > Settings > Environment Variables.`
+    );
+  }
+  return value;
+}
 
-const FROM_EMAIL = "Vector Projector <noreply@weheart.art>";
+const resendApiKey = requireEnv("RESEND_API_KEY");
+const resend = new Resend(resendApiKey);
+
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? "Vector Projector <noreply@weheart.art>";
 
 // =============================================================================
 // EMAIL TEMPLATES

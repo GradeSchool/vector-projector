@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react'
 import { useMutation, useQuery } from 'convex/react'
 import { api } from '@convex/_generated/api'
-import { authClient } from '@/lib/auth-client'
 import {
   EmojiPicker,
   EmojiPickerSearch,
@@ -47,8 +46,7 @@ export function AdminPage({ onBack, onSignOut }: AdminPageProps) {
   }
 
   const handleSignOut = async () => {
-    onSignOut() // Navigate away first to avoid flicker
-    await authClient.signOut()
+    onSignOut()
   }
 
   const handleSendAlert = async () => {

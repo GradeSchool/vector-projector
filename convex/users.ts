@@ -3,6 +3,13 @@ import { mutation, query } from "./_generated/server";
 import { authComponent } from "./auth";
 import { rateLimiter } from "./rateLimiter";
 
+const CONFIG_KEY = "config";
+const SESSION_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+const pickLatestByCreation = <T extends { _creationTime: number }>(records: T[]) =>
+  records.reduce((latest, record) =>
+    record._creationTime > latest._creationTime ? record : latest
+  );
 
 /**
  * Ensures an app user record exists for the authenticated Better Auth user.
@@ -16,6 +23,7 @@ import { rateLimiter } from "./rateLimiter";
 export const ensureAppUser = mutation({
   args: {
     crowdfundingBackerId: v.optional(v.id("crowdfunding_backers")),
+    crowdfundingBackerToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Get the authenticated Better Auth user
@@ -32,11 +40,25 @@ export const ensureAppUser = mutation({
       throw new Error(`Too many sign-in attempts. Try again in ${Math.ceil(retryAfter! / 1000)} seconds.`);
     }
 
+    // Check app state (crowdfunding mode)
+    const configRecords = await ctx.db
+      .query("app_state")
+      .withIndex("by_key", (q) => q.eq("key", CONFIG_KEY))
+      .collect();
+    const config = configRecords.length > 0 ? pickLatestByCreation(configRecords) : null;
+    const crowdfundingActive = config?.crowdfundingActive ?? false;
+
     // Check if app user already exists
-    const existingUser = await ctx.db
+    const existingUsers = await ctx.db
       .query("users")
       .withIndex("by_authUserId", (q) => q.eq("authUserId", authUser._id))
-      .unique();
+      .collect();
+
+    if (existingUsers.length > 1) {
+      throw new Error("Multiple user records found for this account");
+    }
+
+    const existingUser = existingUsers[0];
 
     // Generate new session ID
     const sessionId = crypto.randomUUID();
@@ -50,17 +72,53 @@ export const ensureAppUser = mutation({
         activeSessionId: sessionId,
         sessionStartedAt: now,
       });
-      appUser = { ...existingUser, activeSessionId: sessionId, sessionStartedAt: now };
+      const updatedUser = await ctx.db.get(existingUser._id);
+      if (!updatedUser) {
+        throw new Error("Failed to update user session");
+      }
+      appUser = updatedUser;
     } else {
       // Create new app user with session
       // If crowdfundingBackerId provided, validate and mark as used
+      const requiresBacker = crowdfundingActive;
+      if (requiresBacker && !args.crowdfundingBackerId) {
+        throw new Error("Backer verification is required during crowdfunding");
+      }
+
       if (args.crowdfundingBackerId) {
+        if (!args.crowdfundingBackerToken) {
+          throw new Error("Backer verification token is required");
+        }
         const backer = await ctx.db.get(args.crowdfundingBackerId);
         if (!backer) {
           throw new Error("Invalid backer ID");
         }
         if (backer.usedByUserId) {
           throw new Error("This backer code has already been used");
+        }
+        if (!backer.pendingClaimToken || !backer.pendingClaimExpiresAt) {
+          throw new Error("Backer verification expired. Please verify again.");
+        }
+        if (backer.pendingClaimToken !== args.crowdfundingBackerToken) {
+          throw new Error("Backer verification does not match. Please verify again.");
+        }
+        if (backer.pendingClaimExpiresAt < now) {
+          throw new Error("Backer verification expired. Please verify again.");
+        }
+      }
+
+      // Enforce email uniqueness (defensive, in case of legacy duplicates)
+      const emailMatches = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", authUser.email))
+        .collect();
+      if (emailMatches.length > 1) {
+        throw new Error("Multiple user records found for this email");
+      }
+      if (emailMatches.length > 0) {
+        const matched = emailMatches[0];
+        if (matched.authUserId !== authUser._id) {
+          throw new Error("An account with this email already exists");
         }
       }
 
@@ -79,6 +137,8 @@ export const ensureAppUser = mutation({
         await ctx.db.patch(args.crowdfundingBackerId, {
           usedByUserId: userId,
           usedAt: now,
+          pendingClaimToken: undefined,
+          pendingClaimExpiresAt: undefined,
         });
       }
 
@@ -97,12 +157,14 @@ export const ensureAppUser = mutation({
 
     const isAdmin = adminRecord !== null;
 
+    const resolvedSessionId = appUser.activeSessionId ?? sessionId;
+
     return {
       userId: appUser._id,
       email: appUser.email,
       name: appUser.name,
       isAdmin,
-      sessionId,
+      sessionId: resolvedSessionId,
     };
   },
 });
@@ -119,14 +181,20 @@ export const getCurrentAppUser = query({
       return null;
     }
 
-    const appUser = await ctx.db
+    const appUsers = await ctx.db
       .query("users")
       .withIndex("by_authUserId", (q) => q.eq("authUserId", authUser._id))
-      .unique();
+      .collect();
 
-    if (!appUser) {
+    if (appUsers.length === 0) {
       return null;
     }
+
+    if (appUsers.length > 1) {
+      console.error("Multiple user records found for authUserId", authUser._id);
+    }
+
+    const appUser = pickLatestByCreation(appUsers);
 
     // Check admin status
     const adminRecord = await ctx.db
@@ -152,6 +220,10 @@ export const getCurrentAppUser = query({
 export const validateSession = query({
   args: { sessionId: v.string() },
   handler: async (ctx, { sessionId }) => {
+    if (!SESSION_ID_REGEX.test(sessionId)) {
+      return { valid: false, reason: "invalid_session_id" as const };
+    }
+
     // Wrap in try-catch because getAuthUser can throw when session is cleared
     let authUser;
     try {

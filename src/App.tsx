@@ -9,6 +9,7 @@ import { FaqPage } from './components/FaqPage'
 import { PricingPage } from './components/PricingPage'
 import { TestModal } from './components/modals/TestModal'
 import { AuthModal } from './components/modals/AuthModal'
+import { AuthPendingModal } from './components/modals/AuthPendingModal'
 import { OnboardingModal } from './components/modals/OnboardingModal'
 import { authClient } from '@/lib/auth-client'
 import {
@@ -26,6 +27,7 @@ type Page = 'main' | 'user' | 'faq' | 'pricing'
 const ONBOARDING_KEY = 'vp_onboarding_seen'
 const AUTH_PENDING_KEY = 'vp_auth_pending'
 const BACKER_ID_KEY = 'vp_backer_id'
+const BACKER_TOKEN_KEY = 'vp_backer_token'
 
 function App() {
   const { isLoading, isAuthenticated } = useConvexAuth()
@@ -36,8 +38,12 @@ function App() {
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | null>(null)
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
   const [isEnsuringUser, setIsEnsuringUser] = useState(false)
+  const [ensureUserError, setEnsureUserError] = useState<string | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [authPending, setAuthPending] = useState(false)
+  const [authPendingError, setAuthPendingError] = useState<string | null>(null)
+  const [authPendingDetails, setAuthPendingDetails] = useState<string | null>(null)
+  const [ensureAttempt, setEnsureAttempt] = useState(0)
 
   // Show onboarding modal on first visit
   useEffect(() => {
@@ -97,14 +103,17 @@ function App() {
       let isActive = true
       // No session - need to create one (e.g., after Google OAuth redirect)
       setIsEnsuringUser(true)
+      setEnsureUserError(null)
 
       // Check for backer ID from crowdfunding sign up flow (stored before OAuth redirect)
       const storedBackerId = safeSessionGet(BACKER_ID_KEY)
+      const storedBackerToken = safeSessionGet(BACKER_TOKEN_KEY)
       const crowdfundingBackerId = storedBackerId
         ? (storedBackerId as Id<"crowdfunding_backers">)
         : undefined
+      const crowdfundingBackerToken = storedBackerToken ? String(storedBackerToken) : undefined
 
-      ensureAppUser({ crowdfundingBackerId })
+      ensureAppUser({ crowdfundingBackerId, crowdfundingBackerToken })
         .then((result) => {
           if (!isActive) return
           setSessionId(result.sessionId)
@@ -116,9 +125,17 @@ function App() {
           })
           // Clear backer ID after successful account creation
           safeSessionRemove(BACKER_ID_KEY)
+          safeSessionRemove(BACKER_TOKEN_KEY)
         })
         .catch((err) => {
           console.error('Failed to establish session:', err)
+          if (crowdfundingBackerId) {
+            safeSessionRemove(BACKER_ID_KEY)
+            safeSessionRemove(BACKER_TOKEN_KEY)
+          }
+          setEnsureUserError(
+            err instanceof Error ? err.message : 'Unable to finish sign-in. Please try again.'
+          )
         })
         .finally(() => {
           if (!isActive) return
@@ -128,7 +145,7 @@ function App() {
         isActive = false
       }
     }
-  }, [isAuthenticated, sessionId, wasKicked, ensureAppUser, setSessionId])
+  }, [isAuthenticated, sessionId, wasKicked, ensureAppUser, setSessionId, ensureAttempt])
 
   useEffect(() => {
     if (!isAuthenticated || wasKicked) {
@@ -153,6 +170,7 @@ function App() {
     if (isAuthenticated && sessionId && appUserQuery !== undefined) {
       safeSessionRemove(AUTH_PENDING_KEY)
       setAuthPending(false)
+      setAuthPendingError(null)
     }
   }, [authPending, isAuthenticated, sessionId, appUserQuery])
 
@@ -162,8 +180,12 @@ function App() {
       if (!isAuthenticated && !sessionId) {
         safeSessionRemove(AUTH_PENDING_KEY)
         setAuthPending(false)
+        setAuthPendingError('We could not complete Google sign-in.')
+        setAuthPendingDetails(
+          'This can happen if Google is slow, blocked, or the pop-up was closed. Please try again.'
+        )
       }
-    }, 15000)
+    }, 45000)
     return () => window.clearTimeout(timeout)
   }, [authPending, isAuthenticated, sessionId])
 
@@ -181,7 +203,12 @@ function App() {
       console.error('Sign out failed:', err)
     } finally {
       safeSessionRemove(AUTH_PENDING_KEY)
+      safeSessionRemove(BACKER_TOKEN_KEY)
+      safeSessionRemove(BACKER_ID_KEY)
       setAuthPending(false)
+      setAuthPendingError(null)
+      setAuthPendingDetails(null)
+      setEnsureUserError(null)
       clearSession()
       setAppUser(null)
       setCurrentPage('main')
@@ -253,6 +280,36 @@ function App() {
     )
   }
 
+  if (ensureUserError && isAuthenticated && !sessionId) {
+    return (
+      <div className="flex h-screen items-center justify-center p-8 text-center bg-red-50">
+        <div>
+          <h1 className="text-xl font-semibold mb-2 text-red-800">Sign-in Error</h1>
+          <p className="text-red-700 mb-4">
+            {ensureUserError}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => {
+                setEnsureUserError(null)
+                setEnsureAttempt((prev) => prev + 1)
+              }}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={handleSignOut}
+              className="px-4 py-2 bg-white text-red-700 border border-red-200 rounded hover:bg-red-100"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (tooSmall) {
     return (
       <div className="flex h-screen items-center justify-center p-8 text-center">
@@ -272,7 +329,7 @@ function App() {
   const isAppUserLoading = isAuthenticated && !!sessionId && appUserQuery === undefined
   const isAuthResolving = isLoading || isEnsuringUser || isSigningOut || isSessionValidationPending || isAppUserLoading
   const shouldShowUser = !isAuthResolving && isAuthenticated && hasValidSession && !!effectiveAppUser
-  const shouldShowSignedOut = !isAuthenticated && !sessionId && !authPending
+  const shouldShowSignedOut = !isAuthenticated
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
@@ -425,6 +482,15 @@ function App() {
         onClose={() => setAuthModalMode(null)}
         mode={authModalMode ?? 'signin'}
         onAuthSuccess={handleAuthSuccess}
+      />
+      <AuthPendingModal
+        isOpen={!!authPendingError}
+        message={authPendingError}
+        details={authPendingDetails}
+        onClose={() => {
+          setAuthPendingError(null)
+          setAuthPendingDetails(null)
+        }}
       />
       <OnboardingModal
         isOpen={isOnboardingOpen}

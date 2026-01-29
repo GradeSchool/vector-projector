@@ -7,7 +7,6 @@ import { UserPage } from './components/UserPage'
 import { AdminPage } from './components/AdminPage'
 import { FaqPage } from './components/FaqPage'
 import { PricingPage } from './components/PricingPage'
-import { TestModal } from './components/modals/TestModal'
 import { AuthModal } from './components/modals/AuthModal'
 import { AuthPendingModal } from './components/modals/AuthPendingModal'
 import { OnboardingModal } from './components/modals/OnboardingModal'
@@ -34,7 +33,6 @@ function App() {
   const [tooSmall, setTooSmall] = useState(false)
   const [activeStep, setActiveStep] = useState(1)
   const [currentPage, setCurrentPage] = useState<Page>('main')
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | null>(null)
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
   const [isEnsuringUser, setIsEnsuringUser] = useState(false)
@@ -426,30 +424,11 @@ function App() {
               ))}
             </div>
 
-            {/* Updates section */}
-            <div className="bg-rose-400 text-white px-4 py-2 text-sm font-medium shrink-0">
-              UPDATES
-            </div>
-
             {/* Panel - scrollable if needed */}
             <div className="flex-1 overflow-y-auto p-4">
-              {activeStep === 1 ? (
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Panel content for step 1
-                  </p>
-                  <button
-                    onClick={() => setIsTestModalOpen(true)}
-                    className="px-4 py-2 bg-sky-500 text-white rounded hover:bg-sky-600 transition-colors text-sm"
-                  >
-                    Open Test Modal
-                  </button>
-                </div>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  Panel content for step {activeStep}
-                </div>
-              )}
+              <div className="text-sm text-muted-foreground">
+                Panel content for step {activeStep}
+              </div>
             </div>
           </aside>
 
@@ -476,7 +455,6 @@ function App() {
       )}
 
       {/* Modals */}
-      <TestModal isOpen={isTestModalOpen} onClose={() => setIsTestModalOpen(false)} />
       <AuthModal
         isOpen={authModalMode !== null}
         onClose={() => setAuthModalMode(null)}

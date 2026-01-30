@@ -12,7 +12,10 @@
       "WebSearch",
       "WebFetch(domain:docs.convex.dev)",
       "WebFetch(domain:labs.convex.dev)",
-      "Bash(npx shadcn@latest add:*)"
+      "Bash(npx shadcn@latest add:*)",
+      "WebFetch(domain:convexfs.dev)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.bunny.net)"
     ]
   }
 }

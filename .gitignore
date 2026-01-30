@@ -25,3 +25,5 @@ dist-ssr
 
 # Google OAuth credentials (downloaded from Google Cloud Console)
 client_secret_*.json
+# Bunny.net settings for Vector Projector
+bunny_settings.md

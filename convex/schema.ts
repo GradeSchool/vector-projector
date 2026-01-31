@@ -58,4 +58,100 @@ export default defineSchema({
     key: v.string(), // always "config"
     crowdfundingActive: v.boolean(),
   }).index("by_key", ["key"]),
+
+  // ============================================
+  // Vector Projector Tables
+  // ============================================
+
+  // Pending uploads - tracks blob ownership before commit
+  // Prevents blobId theft between upload and commit
+  // Cleaned up after successful commit or via scheduled job
+  pending_uploads: defineTable({
+    blobId: v.string(), // From convex-fs upload
+    authUserId: v.string(), // Better Auth user ID who uploaded
+    createdAt: v.number(),
+    expiresAt: v.number(), // Auto-cleanup after this time
+  })
+    .index("by_blobId", ["blobId"])
+    .index("by_expiresAt", ["expiresAt"]),
+
+  // STL files - user library + admin base samples
+  stl_files: defineTable({
+    userId: v.id("users"), // Owner (user or admin who uploaded)
+    path: v.string(), // Convex-fs path (e.g., /users/{subject}/stl/abc.stl)
+    fileName: v.string(), // Original filename
+    name: v.string(), // User-defined display name
+    fileSize: v.number(), // Bytes, for quota tracking
+    isBase: v.boolean(), // True for admin samples (discovery mode)
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_isBase", ["isBase"]),
+
+  // SVG files - user library + admin base samples
+  svg_files: defineTable({
+    userId: v.id("users"), // Owner (user or admin who uploaded)
+    path: v.string(), // Convex-fs path
+    fileName: v.string(), // Original filename
+    name: v.string(), // User-defined display name
+    fileSize: v.number(), // Bytes, for quota tracking
+    isBase: v.boolean(), // True for admin samples
+    createdAt: v.number(),
+  })
+    .index("by_userId", ["userId"])
+    .index("by_isBase", ["isBase"]),
+
+  // Projects - user's saved work
+  projects: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    // STL reference (can be user file or base file)
+    stlFileId: v.optional(v.id("stl_files")),
+    // STL orientation in viewer
+    stlOrientation: v.optional(
+      v.object({
+        rotation: v.object({
+          x: v.number(),
+          y: v.number(),
+          z: v.number(),
+          w: v.number(),
+        }),
+        zOffset: v.number(),
+      })
+    ),
+    // Extrusion planes (max 10, enforced in mutation)
+    extrusionPlanes: v.array(
+      v.object({
+        name: v.string(),
+        planeData: v.object({
+          outer: v.array(v.object({ x: v.number(), y: v.number() })),
+          holes: v.array(
+            v.array(v.object({ x: v.number(), y: v.number() }))
+          ),
+          planeZ: v.number(),
+        }),
+        svgFileId: v.optional(v.id("svg_files")),
+        svgSettings: v.optional(
+          v.object({
+            scale: v.number(),
+            rotation: v.number(),
+            position: v.object({ x: v.number(), y: v.number() }),
+          })
+        ),
+        svgShapes: v.optional(
+          v.array(
+            v.object({
+              shapeIndex: v.number(),
+              name: v.string(),
+              extrusionSettings: v.object({
+                height: v.number(),
+              }),
+            })
+          )
+        ),
+      })
+    ),
+  }).index("by_userId", ["userId"]),
 });

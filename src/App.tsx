@@ -10,6 +10,7 @@ import { PricingPage } from './components/PricingPage'
 import { AuthModal } from './components/modals/AuthModal'
 import { AuthPendingModal } from './components/modals/AuthPendingModal'
 import { OnboardingModal } from './components/modals/OnboardingModal'
+import { Step1Panel, StepPlaceholder } from './components/panels'
 import { authClient } from '@/lib/auth-client'
 import {
   safeLocalGet,
@@ -426,9 +427,12 @@ function App() {
 
             {/* Panel - scrollable if needed */}
             <div className="flex-1 overflow-y-auto p-4">
-              <div className="text-sm text-muted-foreground">
-                Panel content for step {activeStep}
-              </div>
+              {activeStep === 1 && <Step1Panel />}
+              {activeStep === 2 && <StepPlaceholder step={2} title="Orient Model" description="Coming soon" />}
+              {activeStep === 3 && <StepPlaceholder step={3} title="Define Planes" description="Coming soon" />}
+              {activeStep === 4 && <StepPlaceholder step={4} title="Add SVG" description="Coming soon" />}
+              {activeStep === 5 && <StepPlaceholder step={5} title="Configure Extrusion" description="Coming soon" />}
+              {activeStep === 6 && <StepPlaceholder step={6} title="Export" description="Coming soon" />}
             </div>
           </aside>
 

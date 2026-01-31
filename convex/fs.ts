@@ -20,7 +20,7 @@ export const fs = new ConvexFS(components.fs, {
     storageZoneName: requireEnv("BUNNY_STORAGE_ZONE"),
     region: process.env.BUNNY_REGION, // Optional, defaults to Frankfurt
     cdnHostname: requireEnv("BUNNY_CDN_HOSTNAME"),
-    tokenKey: process.env.BUNNY_TOKEN_KEY, // Optional, for signed URLs
+    tokenKey: requireEnv("BUNNY_TOKEN_KEY"),
   },
   downloadUrlTtl: 300, // 5 minutes - tighter security
   blobGracePeriod: 86400, // 24 hours - default

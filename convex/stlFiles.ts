@@ -2,20 +2,19 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { fs } from "./fs";
-import { rateLimiter } from "./rateLimiter";
 
 /**
  * Commit an uploaded STL file to the user's library.
  * Called after successful upload via /upload HTTP endpoint.
  *
  * Security features:
- * - Rate limiting (50/hour per user)
+ * - Rate limiting enforced at /upload endpoint (10/hour per user)
  * - BlobId ownership validation (prevents theft)
  * - Server-side path generation (prevents path injection)
  * - Admin validation for base files
  *
  * Flow:
- * 1. Client POSTs file to /upload → gets { blobId }
+ * 1. Client POSTs file to /upload → rate limited, gets { blobId }
  * 2. Client calls this mutation with blobId
  * 3. Server validates blobId ownership
  * 4. Server generates path and commits blob
@@ -45,15 +44,9 @@ export const commitFile = mutation({
       throw new Error("App user not found");
     }
 
-    // Rate limiting - 50 uploads per hour per user
-    const { ok, retryAfter } = await rateLimiter.limit(ctx, "fileUpload", {
-      key: appUser._id,
-    });
-    if (!ok) {
-      throw new Error(
-        `Rate limit exceeded. Try again in ${Math.ceil(retryAfter! / 1000)}s`
-      );
-    }
+    // Note: Rate limiting is enforced at /upload endpoint, not here.
+    // This prevents double-counting (upload + commit = 2 tokens).
+    // Since you can't commit without first uploading, upload rate limit is sufficient.
 
     // Validate blobId ownership - prevents another user from stealing uploads
     const uploadValidation = await ctx.runMutation(

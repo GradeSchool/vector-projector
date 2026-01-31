@@ -64,8 +64,8 @@ export const rateLimiter = new RateLimiter(components.rateLimiter, {
   projectCreate: { kind: "token bucket", rate: 20, period: HOUR, capacity: 5 },
 
   // File upload: Storage costs
-  // 50 per hour per user
-  fileUpload: { kind: "token bucket", rate: 50, period: HOUR, capacity: 10 },
+  // 10 per hour per user (with burst capacity of 5)
+  fileUpload: { kind: "token bucket", rate: 10, period: HOUR, capacity: 5 },
 });
 
 // Usage example in a mutation:

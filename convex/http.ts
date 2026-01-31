@@ -64,6 +64,40 @@ uploadCors.route({
       });
     }
 
+    // One-upload-at-a-time: check if user has an uncommitted upload
+    const hasPending = await ctx.runQuery(internal.uploads.hasPendingUpload, {
+      authUserId: session.user.id,
+    });
+    if (hasPending) {
+      return new Response(
+        JSON.stringify({
+          error: "You have a pending upload. Please wait for it to complete.",
+        }),
+        {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Rate limit check - 10 uploads/hour per user
+    // This runs BEFORE writing blob to prevent storage abuse
+    const rateLimit = await ctx.runMutation(
+      internal.uploads.checkUploadRateLimit,
+      { authUserId: session.user.id }
+    );
+    if (!rateLimit.ok) {
+      return new Response(
+        JSON.stringify({
+          error: `Rate limit exceeded. Try again in ${rateLimit.retryAfter}s`,
+        }),
+        {
+          status: 429,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    }
+
     // Get file data
     const contentType = req.headers.get("Content-Type") ?? "application/octet-stream";
     const data = await req.arrayBuffer();

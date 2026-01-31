@@ -4,8 +4,6 @@ convex mcp
 
 audit
 
-bunny? use the convex bunny thing? it's alpha!
-
 app.tsx is huge. gotta break it apart a bit.
 
 zustand, jotai?

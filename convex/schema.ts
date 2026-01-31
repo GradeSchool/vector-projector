@@ -73,6 +73,7 @@ export default defineSchema({
     expiresAt: v.number(), // Auto-cleanup after this time
   })
     .index("by_blobId", ["blobId"])
+    .index("by_authUserId", ["authUserId"])
     .index("by_expiresAt", ["expiresAt"]),
 
   // STL files - user library + admin base samples

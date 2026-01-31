@@ -15,7 +15,8 @@
       "Bash(npx shadcn@latest add:*)",
       "WebFetch(domain:convexfs.dev)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:docs.bunny.net)"
+      "WebFetch(domain:docs.bunny.net)",
+      "Bash(del \"C:\\\\_projects\\\\vector-projector\\\\temp-update.json\")"
     ]
   }
 }

@@ -543,13 +543,14 @@ Using `@convex-dev/rate-limiter` to protect endpoints from abuse.
 | `signIn` | 20/min | fixed window | IP |
 | `sessionCreate` | 10/min | fixed window | User ID |
 | `projectCreate` | 20/hour | token bucket | User ID |
-| `fileUpload` | 50/hour | token bucket | User ID |
+| `fileUpload` | 10/hour | token bucket | User ID |
 
 ### Applied To
 
-| Mutation | Rule | Key |
-|----------|------|-----|
+| Endpoint/Mutation | Rule | Key |
+|-------------------|------|-----|
 | `ensureAppUser` | `sessionCreate` | Auth user ID |
+| `/upload` HTTP endpoint | `fileUpload` | App user ID |
 
 ### Usage Pattern
 
@@ -649,6 +650,32 @@ export function safeLocalGet(key: string): string | null {
 
 Sensitive operations use `internalMutation` (not callable from client):
 - `crowdfundingBackers:addBacker` - Only callable from other Convex functions
+
+### Content Security Policy (CSP)
+
+CSP headers prevent XSS attacks by restricting what resources can load. Configured in `vercel.json`:
+
+| Directive | Value | Purpose |
+|-----------|-------|---------|
+| `default-src` | `'self'` | Default deny, allow only same origin |
+| `script-src` | `'self'` | No inline scripts, no eval |
+| `style-src` | `'self' 'unsafe-inline'` | Allow Tailwind inline styles |
+| `img-src` | `'self' data: blob: https://*.convex.site` | Images from self, data URIs, Convex CDN |
+| `connect-src` | `'self' https://*.convex.cloud wss://*.convex.cloud https://*.convex.site https://accounts.google.com` | API connections |
+| `frame-src` | `https://accounts.google.com` | Google OAuth popup |
+| `frame-ancestors` | `'none'` | Prevent clickjacking |
+| `form-action` | `'self' https://*.convex.site https://accounts.google.com` | Form submissions |
+
+Additional security headers:
+- `X-Content-Type-Options: nosniff` - Prevent MIME sniffing
+- `X-Frame-Options: DENY` - Prevent framing (backup for frame-ancestors)
+- `X-XSS-Protection: 1; mode=block` - Legacy XSS filter
+- `Referrer-Policy: strict-origin-when-cross-origin` - Control referrer leakage
+- `Permissions-Policy` - Disable unused browser features
+
+**Key File:** `vercel.json`
+
+**Note:** CSP is only enforced in production (Vercel). In dev mode, Vite HMR needs more permissive settings. This is intentional - security headers protect production users.
 
 ## Critical Notes (Pre-Production)
 

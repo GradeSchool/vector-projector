@@ -1,3 +1,4 @@
 export { AlertsSection } from './AlertsSection'
 export { BaseStlSection } from './BaseStlSection'
+export { BaseSvgSection } from './BaseSvgSection'
 export { PlaceholderSection } from './PlaceholderSection'

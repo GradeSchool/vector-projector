@@ -27,3 +27,5 @@ dist-ssr
 client_secret_*.json
 # Bunny.net settings for Vector Projector
 bunny_settings.md
+# Stripe settings for Vector Projector
+stripe_settings.md

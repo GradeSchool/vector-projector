@@ -6,37 +6,38 @@ import { authClient } from '@/lib/auth-client'
 
 const CONVEX_SITE_URL = import.meta.env.VITE_CONVEX_SITE_URL as string
 
-// Max STL file size: 2 MB (as defined in blueprint)
-const MAX_STL_SIZE = 2 * 1024 * 1024
+// Max SVG file size: 15 KB (as defined in blueprint)
+const MAX_SVG_SIZE = 15 * 1024
 
-export function BaseStlSection() {
+export function BaseSvgSection() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [displayName, setDisplayName] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState(false)
-  const [deletingId, setDeletingId] = useState<Id<'stl_files'> | null>(null)
+  const [deletingId, setDeletingId] = useState<Id<'svg_files'> | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const baseSamples = useQuery(api.stlFiles.listBaseSamples)
-  const commitFile = useMutation(api.stlFiles.commitFile)
-  const deleteFile = useMutation(api.stlFiles.deleteFile)
+  const baseSamples = useQuery(api.svgFiles.listBaseSamples)
+  const commitFile = useMutation(api.svgFiles.commitFile)
+  const deleteFile = useMutation(api.svgFiles.deleteFile)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      // Check file size before accepting
-      if (file.size > MAX_STL_SIZE) {
-        setUploadError(`File too large. Max size is ${MAX_STL_SIZE / (1024 * 1024)} MB.`)
+      // Check file size
+      if (file.size > MAX_SVG_SIZE) {
+        setUploadError(`File too large. Max size is ${MAX_SVG_SIZE / 1024} KB.`)
         setSelectedFile(null)
         if (fileInputRef.current) {
           fileInputRef.current.value = ''
         }
         return
       }
+
       setSelectedFile(file)
       // Auto-fill display name from filename (without extension)
-      const nameWithoutExt = file.name.replace(/\.stl$/i, '')
+      const nameWithoutExt = file.name.replace(/\.svg$/i, '')
       setDisplayName(nameWithoutExt)
       setUploadError(null)
       setUploadSuccess(false)
@@ -96,7 +97,7 @@ export function BaseStlSection() {
     }
   }
 
-  const handleDelete = async (fileId: Id<'stl_files'>) => {
+  const handleDelete = async (fileId: Id<'svg_files'>) => {
     if (deletingId) return
     setDeletingId(fileId)
     try {
@@ -110,57 +111,56 @@ export function BaseStlSection() {
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / 1024).toFixed(1)} KB`
   }
 
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold mb-1">Base STL Samples</h2>
+        <h2 className="text-lg font-semibold mb-1">Base SVG Files</h2>
         <p className="text-sm text-gray-500 mb-4">
-          Upload STL files that all users can access in discovery mode.
-          These serve as sample models for new users to explore.
+          Upload SVG files that all users can access for projection onto STL models.
+          These serve as sample patterns for new users to explore.
         </p>
       </div>
 
       {/* Upload form */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-sm font-medium text-blue-900 mb-3">Upload New Base STL</h3>
+      <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+        <h3 className="text-sm font-medium text-emerald-900 mb-3">Upload New Base SVG</h3>
 
         <div className="space-y-3">
           <div>
-            <label className="block text-sm text-blue-700 mb-1">Select STL File</label>
+            <label className="block text-sm text-emerald-700 mb-1">Select SVG File</label>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".stl"
+              accept=".svg"
               onChange={handleFileSelect}
               className="block w-full text-sm text-gray-500
                 file:mr-4 file:py-2 file:px-4
                 file:rounded file:border-0
                 file:text-sm file:font-medium
-                file:bg-blue-100 file:text-blue-700
-                hover:file:bg-blue-200"
+                file:bg-emerald-100 file:text-emerald-700
+                hover:file:bg-emerald-200"
             />
-            <p className="mt-1 text-xs text-blue-500">
-              Max size: {MAX_STL_SIZE / (1024 * 1024)} MB
-            </p>
             {selectedFile && (
-              <p className="mt-1 text-xs text-blue-600">
+              <p className="mt-1 text-xs text-emerald-600">
                 {selectedFile.name} ({formatFileSize(selectedFile.size)})
               </p>
             )}
+            <p className="mt-1 text-xs text-emerald-500">
+              Max size: {MAX_SVG_SIZE / 1024} KB
+            </p>
           </div>
 
           <div>
-            <label className="block text-sm text-blue-700 mb-1">Display Name</label>
+            <label className="block text-sm text-emerald-700 mb-1">Display Name</label>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g., Cube, Gear, Bracket..."
-              className="w-full px-3 py-2 border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+              placeholder="e.g., Star, Heart, Arrow..."
+              className="w-full px-3 py-2 border border-emerald-300 rounded focus:outline-none focus:ring-2 focus:ring-emerald-400"
               maxLength={100}
             />
           </div>
@@ -168,9 +168,9 @@ export function BaseStlSection() {
           <button
             onClick={handleUpload}
             disabled={!selectedFile || !displayName.trim() || uploading}
-            className="w-full px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full px-4 py-2 text-sm bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {uploading ? 'Uploading...' : 'Upload Base STL'}
+            {uploading ? 'Uploading...' : 'Upload Base SVG'}
           </button>
 
           {uploadError && (
@@ -185,13 +185,13 @@ export function BaseStlSection() {
       {/* Existing base samples */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
         <h3 className="text-sm font-medium text-gray-700 mb-3">
-          Existing Base Samples ({baseSamples?.length ?? 0})
+          Existing Base SVGs ({baseSamples?.length ?? 0})
         </h3>
 
         {baseSamples === undefined ? (
           <p className="text-sm text-gray-400">Loading...</p>
         ) : baseSamples.length === 0 ? (
-          <p className="text-sm text-gray-400">No base samples uploaded yet.</p>
+          <p className="text-sm text-gray-400">No base SVGs uploaded yet.</p>
         ) : (
           <div className="space-y-2">
             {baseSamples.map((sample) => (

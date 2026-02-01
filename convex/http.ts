@@ -1,6 +1,7 @@
 import { httpRouter, httpActionGeneric } from "convex/server";
 import { corsRouter } from "convex-helpers/server/cors";
 import { registerRoutes } from "convex-fs";
+import { registerRoutes as registerStripeRoutes } from "@convex-dev/stripe";
 import { authComponent, createAuth } from "./auth";
 import { components, internal } from "./_generated/api";
 import { fs } from "./fs";
@@ -109,10 +110,11 @@ uploadCors.route({
       });
     }
 
-    // File size limit: 50MB
-    const MAX_SIZE = 50 * 1024 * 1024;
+    // File size limit: 2 MB (STL files)
+    // Note: SVG has its own limit (20 KB) checked client-side
+    const MAX_SIZE = 2 * 1024 * 1024;
     if (data.byteLength > MAX_SIZE) {
-      return new Response(JSON.stringify({ error: "File too large (max 50MB)" }), {
+      return new Response(JSON.stringify({ error: "File too large (max 2 MB)" }), {
         status: 413,
         headers: { "Content-Type": "application/json" },
       });
@@ -171,6 +173,13 @@ registerRoutes(http, components.fs, fs, {
 
     return false;
   },
+});
+
+// =============================================================================
+// Stripe webhook routes
+// =============================================================================
+registerStripeRoutes(http, components.stripe, {
+  webhookPath: "/stripe/webhook",
 });
 
 export default http;

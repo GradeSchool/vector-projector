@@ -1,18 +1,32 @@
 import { useState, useEffect } from 'react'
-import { useMutation, useQuery } from 'convex/react'
+import { useMutation, useQuery, useAction } from 'convex/react'
 import { api } from '@convex/_generated/api'
+import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus'
 
 interface UserPageProps {
   onBack: () => void
   onSignOut: () => Promise<void>
+  onGoToPricing: () => void
 }
 
-export function UserPage({ onBack, onSignOut }: UserPageProps) {
+export function UserPage({ onBack, onSignOut, onGoToPricing }: UserPageProps) {
   const [signingOut, setSigningOut] = useState(false)
+  const [managingSubscription, setManagingSubscription] = useState(false)
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
 
   const activeAlerts = useQuery(api.alerts.getActive)
   const hasUnread = useQuery(api.alerts.hasUnread)
   const markAsRead = useMutation(api.alerts.markAsRead)
+  const createCustomerPortalSession = useAction(api.billing.createCustomerPortalSession)
+
+  const {
+    isLoading: subscriptionLoading,
+    hasSubscription,
+    status: subscriptionStatus,
+    tier,
+    currentPeriodEnd,
+    cancelAtPeriodEnd,
+  } = useSubscriptionStatus()
 
   // Auto-mark as read when viewing page with unread alerts
   // Only call if hasUnread is explicitly true (not undefined during loading/sign-out)
@@ -31,6 +45,63 @@ export function UserPage({ onBack, onSignOut }: UserPageProps) {
     } finally {
       setSigningOut(false)
     }
+  }
+
+  const handleManageSubscription = async () => {
+    setManagingSubscription(true)
+    setSubscriptionError(null)
+
+    try {
+      const result = await createCustomerPortalSession({})
+      if (result.url) {
+        window.location.href = result.url
+      } else {
+        setSubscriptionError('Failed to open billing portal')
+        setManagingSubscription(false)
+      }
+    } catch (err) {
+      setSubscriptionError(err instanceof Error ? err.message : 'Something went wrong')
+      setManagingSubscription(false)
+    }
+  }
+
+  const formatDate = (timestamp: number | null) => {
+    if (!timestamp) return 'Unknown'
+    return new Date(timestamp).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    })
+  }
+
+  const getTierName = () => {
+    if (tier === 'personal') return 'Personal'
+    if (tier === 'commercial') return 'Commercial'
+    return 'Premium'
+  }
+
+  const getStatusBadge = () => {
+    if (!subscriptionStatus) return null
+
+    const styles: Record<string, string> = {
+      active: 'bg-green-100 text-green-800',
+      past_due: 'bg-red-100 text-red-800',
+      canceled: 'bg-gray-100 text-gray-800',
+      trialing: 'bg-blue-100 text-blue-800',
+    }
+
+    const labels: Record<string, string> = {
+      active: 'Active',
+      past_due: 'Past Due',
+      canceled: 'Canceled',
+      trialing: 'Trial',
+    }
+
+    return (
+      <span className={`px-2 py-0.5 text-xs rounded ${styles[subscriptionStatus] || 'bg-gray-100 text-gray-800'}`}>
+        {labels[subscriptionStatus] || subscriptionStatus}
+      </span>
+    )
   }
 
   return (
@@ -72,11 +143,66 @@ export function UserPage({ onBack, onSignOut }: UserPageProps) {
             </p>
           </section>
 
+          {/* Subscription Section */}
           <section className="bg-white border rounded-lg p-4">
-            <h2 className="font-semibold mb-2">Subscription</h2>
-            <p className="text-sm text-gray-600">
-              View and manage your subscription plan.
-            </p>
+            <h2 className="font-semibold mb-3">Subscription</h2>
+
+            {subscriptionLoading ? (
+              <div className="animate-pulse space-y-2">
+                <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+              </div>
+            ) : hasSubscription ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-medium">{getTierName()}</span>
+                  {getStatusBadge()}
+                </div>
+
+                {subscriptionStatus === 'past_due' && (
+                  <div className="bg-red-50 border border-red-200 rounded p-3">
+                    <p className="text-red-800 text-sm font-medium">Payment Issue</p>
+                    <p className="text-red-700 text-xs mt-1">
+                      Your last payment failed. Please update your payment method to avoid service interruption.
+                    </p>
+                  </div>
+                )}
+
+                {cancelAtPeriodEnd ? (
+                  <p className="text-sm text-gray-600">
+                    Subscription ends on {formatDate(currentPeriodEnd)}
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    Renews on {formatDate(currentPeriodEnd)}
+                  </p>
+                )}
+
+                {subscriptionError && (
+                  <p className="text-sm text-red-500">{subscriptionError}</p>
+                )}
+
+                <button
+                  onClick={handleManageSubscription}
+                  disabled={managingSubscription}
+                  className="px-4 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {managingSubscription ? 'Opening...' : subscriptionStatus === 'past_due' ? 'Update Payment' : 'Manage Subscription'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  No active subscription. Subscribe to unlock all features.
+                </p>
+                <button
+                  onClick={onGoToPricing}
+                  className="px-4 py-2 text-sm bg-sky-500 text-white rounded hover:bg-sky-600"
+                >
+                  Subscribe
+                </button>
+              </div>
+            )}
           </section>
 
           <section className="bg-white border rounded-lg p-4">

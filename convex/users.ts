@@ -213,6 +213,22 @@ export const getCurrentAppUser = query({
 });
 
 /**
+ * Get app user by auth user ID.
+ * Used for backer validation in checkout.
+ */
+export const getByAuthUserId = query({
+  args: { authUserId: v.string() },
+  handler: async (ctx, { authUserId }) => {
+    const appUser = await ctx.db
+      .query("users")
+      .withIndex("by_authUserId", (q) => q.eq("authUserId", authUserId))
+      .unique();
+
+    return appUser;
+  },
+});
+
+/**
  * Validates that the provided sessionId matches the user's active session.
  * Returns { valid: true } if session is valid, { valid: false, reason } if not.
  * Includes grace period for page refreshes.

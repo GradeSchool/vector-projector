@@ -15,6 +15,9 @@ export default defineSchema({
     sessionStartedAt: v.optional(v.number()),
     // Crowdfunding backer link (for tier-based billing discounts)
     crowdfundingBackerId: v.optional(v.id("crowdfunding_backers")),
+    // Backer access period (authoritative for access checks)
+    backerAccessGrantedAt: v.optional(v.number()),
+    backerAccessUntil: v.optional(v.number()),
     // Alert tracking - timestamp of last seen alert
     lastSeenAlertAt: v.optional(v.number()),
   })
@@ -39,6 +42,9 @@ export default defineSchema({
     usedAt: v.optional(v.number()), // When it was claimed
     pendingClaimToken: v.optional(v.string()), // short-lived verification token
     pendingClaimExpiresAt: v.optional(v.number()),
+    // Access period granted (audit trail)
+    accessGrantedAt: v.optional(v.number()),
+    accessUntil: v.optional(v.number()),
   })
     .index("by_username_code", ["username", "accessCode"])
     .index("by_usernameLower_code", ["usernameLower", "accessCode"])
@@ -57,6 +63,36 @@ export default defineSchema({
   app_state: defineTable({
     key: v.string(), // always "config"
     crowdfundingActive: v.boolean(),
+  }).index("by_key", ["key"]),
+
+  // Pricing catalog - snapshot of Stripe products/prices
+  // Singleton pattern: key="catalog"
+  // Updated via admin-triggered sync, NOT webhooks
+  pricing_catalog: defineTable({
+    key: v.string(), // always "catalog"
+    products: v.array(
+      v.object({
+        productId: v.string(),
+        name: v.string(),
+        active: v.boolean(),
+        metadata: v.record(v.string(), v.string()),
+      })
+    ),
+    prices: v.array(
+      v.object({
+        priceId: v.string(),
+        productId: v.string(),
+        unitAmount: v.number(), // cents
+        currency: v.string(),
+        interval: v.string(), // "month" or "year"
+        active: v.boolean(),
+        nickname: v.optional(v.string()),
+        metadata: v.record(v.string(), v.string()),
+      })
+    ),
+    lastSyncedAt: v.number(),
+    lastSyncError: v.optional(v.string()),
+    lastSyncFailedAt: v.optional(v.number()),
   }).index("by_key", ["key"]),
 
   // ============================================

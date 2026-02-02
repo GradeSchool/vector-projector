@@ -7,9 +7,11 @@ import { UserPage } from './components/UserPage'
 import { AdminPage } from './components/AdminPage'
 import { FaqPage } from './components/FaqPage'
 import { PricingPage } from './components/PricingPage'
+import { CheckoutSuccessPage } from './components/CheckoutSuccessPage'
 import { AuthModal } from './components/modals/AuthModal'
 import { AuthPendingModal } from './components/modals/AuthPendingModal'
 import { OnboardingModal } from './components/modals/OnboardingModal'
+import { SubscribeModal } from './components/modals/SubscribeModal'
 import { Step1Panel, Step3Panel, StepPlaceholder } from './components/panels'
 import { authClient } from '@/lib/auth-client'
 import {
@@ -22,7 +24,8 @@ import {
 const MIN_WIDTH = 1024
 const MIN_HEIGHT = 768
 
-type Page = 'main' | 'user' | 'faq' | 'pricing'
+type Page = 'main' | 'user' | 'faq' | 'pricing' | 'checkout-success'
+type SubscribeTier = 'personal' | 'commercial' | null
 
 const ONBOARDING_KEY = 'vp_onboarding_seen'
 const AUTH_PENDING_KEY = 'vp_auth_pending'
@@ -36,6 +39,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('main')
   const [authModalMode, setAuthModalMode] = useState<'signin' | 'signup' | null>(null)
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false)
+  const [subscribeModalTier, setSubscribeModalTier] = useState<SubscribeTier>(null)
   const [isEnsuringUser, setIsEnsuringUser] = useState(false)
   const [ensureUserError, setEnsureUserError] = useState<string | null>(null)
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -49,6 +53,17 @@ function App() {
     const seen = safeLocalGet(ONBOARDING_KEY)
     if (!seen) {
       setIsOnboardingOpen(true)
+    }
+  }, [])
+
+  // Check for checkout success on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sessionId = params.get('session_id')
+    if (sessionId) {
+      setCurrentPage('checkout-success')
+      // Clean URL without triggering navigation
+      window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
 
@@ -397,12 +412,18 @@ function App() {
           <UserPage
             onBack={() => setCurrentPage('main')}
             onSignOut={handleSignOut}
+            onGoToPricing={() => setCurrentPage('pricing')}
           />
         )
       ) : currentPage === 'faq' ? (
         <FaqPage onBack={() => setCurrentPage('main')} />
       ) : currentPage === 'pricing' ? (
-        <PricingPage onBack={() => setCurrentPage('main')} />
+        <PricingPage
+          onBack={() => setCurrentPage('main')}
+          onSubscribe={(tier) => setSubscribeModalTier(tier)}
+        />
+      ) : currentPage === 'checkout-success' ? (
+        <CheckoutSuccessPage onContinue={() => setCurrentPage('main')} />
       ) : (
         /* Main content area */
         <div className="flex flex-1 overflow-hidden">
@@ -478,6 +499,13 @@ function App() {
         onClose={handleOnboardingClose}
         onGoToFaq={handleGoToFaq}
       />
+      {subscribeModalTier && (
+        <SubscribeModal
+          isOpen={true}
+          onClose={() => setSubscribeModalTier(null)}
+          tier={subscribeModalTier}
+        />
+      )}
     </div>
   )
 }

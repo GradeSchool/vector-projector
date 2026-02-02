@@ -4,6 +4,7 @@ import {
   BaseStlSection,
   BaseSvgSection,
   PlaceholderSection,
+  SettingsSection,
 } from './sections'
 
 type AdminSection =
@@ -109,7 +110,7 @@ export function AdminLayout({ onBack, onSignOut }: AdminLayoutProps) {
       case 'analytics':
         return <PlaceholderSection title="Analytics" />
       case 'settings':
-        return <PlaceholderSection title="System Settings" />
+        return <SettingsSection />
       case 'logs':
         return <PlaceholderSection title="Logs" />
       default:

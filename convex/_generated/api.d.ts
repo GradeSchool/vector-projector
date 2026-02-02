@@ -11,10 +11,12 @@
 import type * as alerts from "../alerts.js";
 import type * as appState from "../appState.js";
 import type * as auth from "../auth.js";
+import type * as billing from "../billing.js";
 import type * as crowdfundingBackers from "../crowdfundingBackers.js";
 import type * as emails from "../emails.js";
 import type * as fs from "../fs.js";
 import type * as http from "../http.js";
+import type * as pricingCatalog from "../pricingCatalog.js";
 import type * as rateLimiter from "../rateLimiter.js";
 import type * as stlFiles from "../stlFiles.js";
 import type * as svgFiles from "../svgFiles.js";
@@ -31,10 +33,12 @@ declare const fullApi: ApiFromModules<{
   alerts: typeof alerts;
   appState: typeof appState;
   auth: typeof auth;
+  billing: typeof billing;
   crowdfundingBackers: typeof crowdfundingBackers;
   emails: typeof emails;
   fs: typeof fs;
   http: typeof http;
+  pricingCatalog: typeof pricingCatalog;
   rateLimiter: typeof rateLimiter;
   stlFiles: typeof stlFiles;
   svgFiles: typeof svgFiles;

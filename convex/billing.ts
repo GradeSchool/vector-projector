@@ -40,7 +40,13 @@ const stripeClient = new StripeSubscriptions(components.stripe, {});
 export const getSubscriptionStatus = query({
   args: {},
   handler: async (ctx) => {
-    const authUser = await authComponent.getAuthUser(ctx);
+    // Wrap in try-catch because getAuthUser can throw when session is being restored
+    let authUser;
+    try {
+      authUser = await authComponent.getAuthUser(ctx);
+    } catch {
+      return null;
+    }
     if (!authUser) {
       return null;
     }
@@ -133,7 +139,7 @@ export const createCheckoutSession = action({
 
     // Find matching price
     const matchingPrices = catalog.prices.filter(
-      (p) =>
+      (p: { metadata: Record<string, string>; interval: string; active: boolean }) =>
         p.metadata.tier === tier &&
         p.metadata.audience === audience &&
         p.interval === interval &&
@@ -188,7 +194,12 @@ export const createCheckoutSession = action({
 export const createCustomerPortalSession = action({
   args: {},
   handler: async (ctx) => {
-    const authUser = await authComponent.getAuthUser(ctx);
+    let authUser;
+    try {
+      authUser = await authComponent.getAuthUser(ctx);
+    } catch {
+      throw new Error("Not authenticated");
+    }
     if (!authUser) {
       throw new Error("Not authenticated");
     }
@@ -213,5 +224,96 @@ export const createCustomerPortalSession = action({
     });
 
     return { url: session.url };
+  },
+});
+
+// =============================================================================
+// Cancel Subscription Action
+// =============================================================================
+
+/**
+ * Cancel subscription at end of current billing period.
+ * User keeps access until period ends, then subscription stops.
+ */
+export const cancelSubscription = action({
+  args: {},
+  handler: async (ctx) => {
+    let authUser;
+    try {
+      authUser = await authComponent.getAuthUser(ctx);
+    } catch {
+      throw new Error("Not authenticated");
+    }
+    if (!authUser) {
+      throw new Error("Not authenticated");
+    }
+
+    // Get user's subscription
+    const subscriptions = await ctx.runQuery(
+      components.stripe.public.listSubscriptionsByUserId,
+      { userId: authUser._id }
+    );
+
+    const activeSubscription = subscriptions.find(
+      (s) => s.status === "active" || s.status === "trialing"
+    );
+
+    if (!activeSubscription) {
+      throw new Error("No active subscription found");
+    }
+
+    // Cancel at period end via component method
+    await stripeClient.cancelSubscription(ctx, {
+      stripeSubscriptionId: activeSubscription.stripeSubscriptionId,
+      cancelAtPeriodEnd: true,
+    });
+
+    return { success: true };
+  },
+});
+
+// =============================================================================
+// Reactivate Subscription Action
+// =============================================================================
+
+/**
+ * Reactivate a subscription that was set to cancel at period end.
+ * Only works if the subscription hasn't actually ended yet.
+ */
+export const reactivateSubscription = action({
+  args: {},
+  handler: async (ctx) => {
+    let authUser;
+    try {
+      authUser = await authComponent.getAuthUser(ctx);
+    } catch {
+      throw new Error("Not authenticated");
+    }
+    if (!authUser) {
+      throw new Error("Not authenticated");
+    }
+
+    // Get user's subscription
+    const subscriptions = await ctx.runQuery(
+      components.stripe.public.listSubscriptionsByUserId,
+      { userId: authUser._id }
+    );
+
+    const cancelingSubscription = subscriptions.find(
+      (s) =>
+        (s.status === "active" || s.status === "trialing") &&
+        s.cancelAtPeriodEnd
+    );
+
+    if (!cancelingSubscription) {
+      throw new Error("No subscription pending cancellation found");
+    }
+
+    // Reactivate via component method
+    await stripeClient.reactivateSubscription(ctx, {
+      stripeSubscriptionId: cancelingSubscription.stripeSubscriptionId,
+    });
+
+    return { success: true };
   },
 });

@@ -11,13 +11,16 @@ interface UserPageProps {
 
 export function UserPage({ onBack, onSignOut, onGoToPricing }: UserPageProps) {
   const [signingOut, setSigningOut] = useState(false)
-  const [managingSubscription, setManagingSubscription] = useState(false)
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const activeAlerts = useQuery(api.alerts.getActive)
   const hasUnread = useQuery(api.alerts.hasUnread)
   const markAsRead = useMutation(api.alerts.markAsRead)
-  const createCustomerPortalSession = useAction(api.billing.createCustomerPortalSession)
+  const cancelSubscription = useAction(api.billing.cancelSubscription)
+  const reactivateSubscription = useAction(api.billing.reactivateSubscription)
+  const createPortalSession = useAction(api.billing.createCustomerPortalSession)
 
   const {
     isLoading: subscriptionLoading,
@@ -47,21 +50,47 @@ export function UserPage({ onBack, onSignOut, onGoToPricing }: UserPageProps) {
     }
   }
 
-  const handleManageSubscription = async () => {
-    setManagingSubscription(true)
+  const handleCancelSubscription = async () => {
+    setActionLoading('cancel')
     setSubscriptionError(null)
+    setSuccessMessage(null)
 
     try {
-      const result = await createCustomerPortalSession({})
-      if (result.url) {
-        window.location.href = result.url
-      } else {
-        setSubscriptionError('Failed to open billing portal')
-        setManagingSubscription(false)
-      }
+      await cancelSubscription({})
+      setSuccessMessage('Subscription will be canceled at the end of the billing period.')
     } catch (err) {
-      setSubscriptionError(err instanceof Error ? err.message : 'Something went wrong')
-      setManagingSubscription(false)
+      setSubscriptionError(err instanceof Error ? err.message : 'Failed to cancel subscription')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleReactivateSubscription = async () => {
+    setActionLoading('reactivate')
+    setSubscriptionError(null)
+    setSuccessMessage(null)
+
+    try {
+      await reactivateSubscription({})
+      setSuccessMessage('Subscription reactivated! Your subscription will continue.')
+    } catch (err) {
+      setSubscriptionError(err instanceof Error ? err.message : 'Failed to reactivate subscription')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleManageSubscription = async () => {
+    setActionLoading('portal')
+    setSubscriptionError(null)
+    setSuccessMessage(null)
+
+    try {
+      const { url } = await createPortalSession({})
+      window.location.href = url
+    } catch (err) {
+      setSubscriptionError(err instanceof Error ? err.message : 'Failed to open billing portal')
+      setActionLoading(null)
     }
   }
 
@@ -169,8 +198,8 @@ export function UserPage({ onBack, onSignOut, onGoToPricing }: UserPageProps) {
                 )}
 
                 {cancelAtPeriodEnd ? (
-                  <p className="text-sm text-gray-600">
-                    Subscription ends on {formatDate(currentPeriodEnd)}
+                  <p className="text-sm text-amber-600">
+                    Cancels on {formatDate(currentPeriodEnd)}
                   </p>
                 ) : (
                   <p className="text-sm text-gray-600">
@@ -179,16 +208,42 @@ export function UserPage({ onBack, onSignOut, onGoToPricing }: UserPageProps) {
                 )}
 
                 {subscriptionError && (
-                  <p className="text-sm text-red-500">{subscriptionError}</p>
+                  <p className="text-sm text-red-500 bg-red-50 p-2 rounded">{subscriptionError}</p>
                 )}
 
-                <button
-                  onClick={handleManageSubscription}
-                  disabled={managingSubscription}
-                  className="px-4 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {managingSubscription ? 'Opening...' : subscriptionStatus === 'past_due' ? 'Update Payment' : 'Manage Subscription'}
-                </button>
+                {successMessage && (
+                  <p className="text-sm text-green-600 bg-green-50 p-2 rounded">{successMessage}</p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {/* Manage Subscription - opens Stripe portal */}
+                  <button
+                    onClick={handleManageSubscription}
+                    disabled={actionLoading !== null}
+                    className="px-4 py-2 text-sm bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {actionLoading === 'portal' ? 'Opening...' : 'Manage Billing'}
+                  </button>
+
+                  {/* Cancel or Reactivate based on state */}
+                  {cancelAtPeriodEnd ? (
+                    <button
+                      onClick={handleReactivateSubscription}
+                      disabled={actionLoading !== null}
+                      className="px-4 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {actionLoading === 'reactivate' ? 'Reactivating...' : 'Reactivate Subscription'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleCancelSubscription}
+                      disabled={actionLoading !== null}
+                      className="px-4 py-2 text-sm border border-red-300 text-red-600 rounded hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {actionLoading === 'cancel' ? 'Canceling...' : 'Cancel Subscription'}
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="space-y-3">

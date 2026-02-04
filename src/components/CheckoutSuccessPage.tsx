@@ -9,23 +9,23 @@ export function CheckoutSuccessPage({ onContinue }: CheckoutSuccessPageProps) {
   const { isLoading, hasSubscription, tier } = useSubscriptionStatus()
   const [autoRedirectCountdown, setAutoRedirectCountdown] = useState(5)
 
-  // Auto-redirect after subscription is confirmed
+  // Countdown timer
   useEffect(() => {
     if (!hasSubscription) return
 
     const interval = setInterval(() => {
-      setAutoRedirectCountdown((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval)
-          onContinue()
-          return 0
-        }
-        return prev - 1
-      })
+      setAutoRedirectCountdown((prev) => (prev <= 1 ? 0 : prev - 1))
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [hasSubscription, onContinue])
+  }, [hasSubscription])
+
+  // Auto-redirect when countdown reaches 0
+  useEffect(() => {
+    if (hasSubscription && autoRedirectCountdown === 0) {
+      onContinue()
+    }
+  }, [hasSubscription, autoRedirectCountdown, onContinue])
 
   const tierName = tier === 'personal' ? 'Personal' : tier === 'commercial' ? 'Commercial' : 'Premium'
 

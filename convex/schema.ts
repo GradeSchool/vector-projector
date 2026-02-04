@@ -74,6 +74,8 @@ export default defineSchema({
       v.object({
         productId: v.string(),
         name: v.string(),
+        description: v.optional(v.string()),
+        images: v.optional(v.array(v.string())),
         active: v.boolean(),
         metadata: v.record(v.string(), v.string()),
       })

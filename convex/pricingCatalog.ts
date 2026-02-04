@@ -131,6 +131,8 @@ export const sync = action({
       const products = matchingProducts.map((p) => ({
         productId: p.id,
         name: p.name,
+        description: p.description ?? undefined,
+        images: p.images && p.images.length > 0 ? p.images : undefined,
         active: p.active,
         metadata: p.metadata as Record<string, string>,
       }));
@@ -189,6 +191,8 @@ export const writeCatalog = internalMutation({
       v.object({
         productId: v.string(),
         name: v.string(),
+        description: v.optional(v.string()),
+        images: v.optional(v.array(v.string())),
         active: v.boolean(),
         metadata: v.record(v.string(), v.string()),
       })

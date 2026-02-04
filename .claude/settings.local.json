@@ -19,7 +19,8 @@
       "Bash(del \"C:\\\\_projects\\\\vector-projector\\\\temp-update.json\")",
       "Bash(del C:_projectsvector-projectortemp-update.json)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:docs.stripe.com)"
+      "WebFetch(domain:docs.stripe.com)",
+      "WebFetch(domain:www.convex.dev)"
     ]
   }
 }

@@ -1,5 +1,7 @@
 upload stl file security.
 
+stl and svg file upload parsing. file size checks, stls generate thumbanilas. svgo? svg preview, does your svg look correct?
+
 convex mcp
 
 audit
